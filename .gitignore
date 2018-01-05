@@ -1,0 +1,6 @@
+# IDE project configuration
+/.idea/
+/*.iml
+
+# build output
+/target/

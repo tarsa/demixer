@@ -1,0 +1,6 @@
+[package]
+name = "demixer"
+version = "0.1.0"
+authors = ["Piotr Tarsa"]
+
+[dependencies]
