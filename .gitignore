@@ -4,3 +4,6 @@
 
 # build output
 /target/
+
+# evaluation resources
+/work
