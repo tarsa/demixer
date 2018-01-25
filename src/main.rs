@@ -62,32 +62,85 @@ fn compare_for_equal_prefix(contents: &[u8], starting_index_first: usize,
     equal
 }
 
-fn brute_force_process_bit(contents: &[u8], byte_index: usize, bit_index: i32) {
-    let mut something_printed = false;
-    for order in 0..MAX_ORDER + 1 {
-        let mut bit_history = 1;
-        for scanned_index in 0..byte_index - order {
-            if compare_for_equal_prefix(contents, scanned_index,
-                                        byte_index - order, bit_index, order) {
-                bit_history = updated_bit_history(
-                    bit_history,
-                    get_bit(contents[scanned_index + order], bit_index));
-            }
+pub struct CollectedBitHistories {
+    pub items: Vec<u32>, // TODO: wrap u32 in BitHistory
+}
+
+impl CollectedBitHistories {
+    pub fn new(max_order: usize) -> CollectedBitHistories {
+        CollectedBitHistories {
+            items: Vec::with_capacity(max_order + 1)
         }
-        if bit_history == 1 {
-            break;
-        }
-        if !something_printed {
-            print!("{}: ", bit_index);
-        }
-        if order != 0 {
-            print!(", ");
-        }
-        print!("{:x}", bit_history);
-        something_printed = true;
     }
-    if something_printed {
-        println!();
+
+    fn reset(&mut self) {
+        self.items.clear();
+    }
+}
+
+trait HistorySource {
+    fn new(input_size: usize, max_order: usize) -> Self;
+
+    fn start_new_byte(&mut self);
+
+    fn gather_history_states(&self, bit_histories: &mut CollectedBitHistories);
+
+    fn process_input_bit(&mut self, input_bit: bool);
+}
+
+struct NaiveHistorySource {
+    input: Vec<u8>,
+    input_cursor: usize,
+    bit_index: usize,
+    max_order: usize,
+}
+
+impl HistorySource for NaiveHistorySource {
+    fn new(input_size: usize, max_order: usize) -> NaiveHistorySource {
+        NaiveHistorySource {
+            input: Vec::with_capacity(input_size),
+            input_cursor: 0,
+            bit_index: 7,
+            max_order,
+        }
+    }
+
+    fn start_new_byte(&mut self) {
+        assert_eq!(self.bit_index, 7);
+        assert_eq!(self.input_cursor, self.input.len());
+        assert_ne!(self.input.len(), self.input.capacity());
+        self.input.push(0);
+    }
+
+    fn gather_history_states(&self, bit_histories: &mut CollectedBitHistories) {
+        for order in 0..(self.max_order + 1) {
+            let mut bit_history = 1;
+            for scanned_index in 0..(self.input_cursor - order) {
+                let prefix_equal = compare_for_equal_prefix(
+                    &self.input, scanned_index, self.input_cursor - order,
+                    self.bit_index as i32, order,
+                );
+                if prefix_equal {
+                    let next_bit = get_bit(self.input[scanned_index + order],
+                                           self.bit_index as i32);
+                    bit_history = updated_bit_history(bit_history, next_bit);
+                }
+            }
+            if bit_history == 1 {
+                break;
+            }
+            bit_histories.items.push(bit_history);
+        }
+    }
+
+    fn process_input_bit(&mut self, input_bit: bool) {
+        self.input[self.input_cursor] |= (input_bit as u8) << self.bit_index;
+        if self.bit_index > 0 {
+            self.bit_index -= 1;
+        } else {
+            self.bit_index = 7;
+            self.input_cursor += 1;
+        }
     }
 }
 
@@ -97,52 +150,88 @@ struct ContextState {
     bit_history: u32,
 }
 
-fn fat_map_process_bit(contents: &[u8],
-                       maps: &mut Vec<HashMap<u64, Vec<ContextState>>>,
-                       byte_index: usize, bit_index: i32) {
-    let mut something_printed = false;
-    let mut silent = false;
-    let bit = get_bit(contents[byte_index], bit_index);
-    for order in 0..MAX_ORDER.min(byte_index) + 1 {
-        let map = &mut maps[(order * 8) + (bit_index as usize)];
+struct FatMapHistorySource {
+    input: Vec<u8>,
+    input_cursor: usize,
+    bit_index: usize,
+    max_order: usize,
+    maps: Vec<HashMap<u64, Vec<ContextState>>>,
+}
+
+impl FatMapHistorySource {
+    fn compute_hash(&self, order: usize) -> u64 {
+        let map = &self.maps[(order * 8) + (self.bit_index as usize)];
         let mut hasher: DefaultHasher = map.hasher().build_hasher();
-        hasher.write(&contents[byte_index - order..byte_index]);
-        hasher.write_u32(
-            (256 + contents[byte_index] as u32) >> (bit_index + 1));
-        let hash = hasher.finish();
-        let vec: &mut Vec<_> = map.entry(hash).or_insert_with(|| Vec::new());
-        let bit_history = match vec.iter_mut().find(|item|
-            compare_for_equal_prefix(contents, byte_index - order,
-                                     item.byte_index, bit_index, order)) {
-            Some(ctx) => {
-                let result = ctx.bit_history;
-                ctx.bit_history = updated_bit_history(result, bit);
-                result
-            }
-            None =>
-                1
-        };
-        if bit_history == 1 {
-            let fresh = ContextState {
-                byte_index: byte_index - order,
-                bit_history: 2 + bit as u32,
-            };
-            vec.push(fresh);
-            silent = true;
-        }
-        if !silent {
-            if !something_printed {
-                print!("{}: ", bit_index);
-            }
-            if order != 0 {
-                print!(", ");
-            }
-            print!("{:x}", bit_history);
-            something_printed = true;
+        hasher.write(
+            &self.input[self.input_cursor - order..self.input_cursor]);
+        hasher.write_u32((256 + self.input[self.input_cursor] as u32) >>
+            (self.bit_index + 1));
+        hasher.finish()
+    }
+}
+
+impl HistorySource for FatMapHistorySource {
+    fn new(input_size: usize, max_order: usize) -> FatMapHistorySource {
+        FatMapHistorySource {
+            input: Vec::with_capacity(input_size),
+            input_cursor: 0,
+            bit_index: 7,
+            max_order,
+            maps: vec![HashMap::new(); (max_order + 1) * 8],
         }
     }
-    if something_printed {
-        println!();
+
+    fn start_new_byte(&mut self) {
+        assert_eq!(self.bit_index, 7);
+        assert_eq!(self.input_cursor, self.input.len());
+        assert_ne!(self.input.len(), self.input.capacity());
+        self.input.push(0);
+    }
+
+    fn gather_history_states(&self, bit_histories: &mut CollectedBitHistories) {
+        for order in 0..(self.max_order.min(self.input_cursor) + 1) {
+            let map = &self.maps[(order * 8) + (self.bit_index as usize)];
+            let hash = self.compute_hash(order);
+            let vec_opt: Option<&Vec<_>> = map.get(&hash);
+            match vec_opt.into_iter().
+                flat_map(|vec| vec.into_iter().find(|item| {
+                    compare_for_equal_prefix(
+                        &self.input, self.input_cursor - order,
+                        item.byte_index, self.bit_index as i32, order)
+                })).last() {
+                Some(ctx) => bit_histories.items.push(ctx.bit_history),
+                None => break,
+            };
+        }
+    }
+
+    fn process_input_bit(&mut self, input_bit: bool) {
+        for order in 0..(self.max_order.min(self.input_cursor) + 1) {
+            let hash = self.compute_hash(order);
+            let map = &mut self.maps[(order * 8) + (self.bit_index as usize)];
+            let vec: &mut Vec<_> = map.entry(hash).or_insert(Vec::new());
+            let input = &self.input;
+            let byte_index = self.input_cursor - order;
+            let bit_index = self.bit_index;
+            let found = vec.iter_mut().find(|item| compare_for_equal_prefix(
+                input, byte_index, item.byte_index, bit_index as i32, order)
+            ).map(|ctx| ctx.bit_history =
+                updated_bit_history(ctx.bit_history, input_bit as u8)
+            ).is_some();
+            if !found {
+                vec.push(ContextState {
+                    byte_index,
+                    bit_history: 2 + input_bit as u32,
+                });
+            };
+        }
+        self.input[self.input_cursor] |= (input_bit as u8) << self.bit_index;
+        if self.bit_index > 0 {
+            self.bit_index -= 1;
+        } else {
+            self.bit_index = 7;
+            self.input_cursor += 1;
+        }
     }
 }
 
@@ -154,59 +243,20 @@ fn main() {
     let file_name = args.get(2).expect("provide file name");
 
     let mut file = std::fs::File::open(file_name).expect("file not found");
+//    for byte in std::io::BufReader::new(file).bytes() {}
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer).unwrap();
     std::mem::drop(file);
 
     match history_source_type {
         "brute_force" =>
-            for (i, &x) in buffer.iter().take(1234).enumerate() {
-                println!("Processing byte with index: {}, {}", i, x as char);
-                for b in (0..7 + 1).rev() {
-                    brute_force_process_bit(&buffer, i, b);
-                }
-                println!();
-            },
-        "fat_map" => {
-            let mut maps = vec![HashMap::new(); (MAX_ORDER + 1) * 8];
-            for (i, &x) in buffer.iter().take(1234).enumerate() {
-                println!("Processing byte with index: {}, {}", i, x as char);
-                for b in (0..7 + 1).rev() {
-                    fat_map_process_bit(&buffer, &mut maps, i, b);
-                }
-                println!();
-            }
-        }
-        "tree" => {
-            let mut collected_states =
-                tree::CollectedBitHistories::new(MAX_ORDER);
-            let nodes = tree::Nodes::new(buffer.len());
-            let mut tree = tree::Tree::new(nodes, buffer.len(), 0);
-            let mut active_contexts = tree::ActiveContexts::new(MAX_ORDER);
-            for (i, &x) in buffer.iter().take(1234).enumerate() {
-                println!("Processing byte with index: {}, {}", i, x as char);
-                for bit_index in (0..7 + 1).rev() {
-                    tree.gather_states(&active_contexts, &mut collected_states,
-                                       bit_index);
-                    if collected_states.items.len() > 0 {
-                        print!("{}: ", bit_index);
-                        print!("{:x}", collected_states.items[0]);
-                        for i in 1..collected_states.items.len() {
-                            print!(", ");
-                            print!("{:x}", collected_states.items[i]);
-                        }
-                        println!();
-                    }
-                    let incoming_bit = get_bit(x, bit_index as i32) == 1;
-                    tree.extend(&mut active_contexts, incoming_bit,
-                                bit_index, MAX_ORDER);
-                }
-                active_contexts.shift(&tree);
-                tree.window_cursor += 1;
-                println!();
-            }
-        }
-        _ => panic!("unrecognized history source type!")
+            print_bit_histories::<NaiveHistorySource>(&buffer),
+        "fat_map" =>
+            print_bit_histories::<FatMapHistorySource>(&buffer),
+        "tree" =>
+            print_bit_histories::<tree::TreeHistorySource>(&buffer),
+        _ =>
+            panic!("unrecognized history source type!")
     }
 }
 
@@ -215,4 +265,31 @@ fn print_banner() {
     eprint!("Copyright (C) 2018  Piotr Tarsa ");
     eprintln!(" https://github.com/tarsa )");
     eprintln!();
+}
+
+fn print_bit_histories<Source: HistorySource>(input: &[u8]) {
+    let mut collected_states =
+        CollectedBitHistories::new(MAX_ORDER);
+    let mut history_source =
+        Source::new(input.len(), MAX_ORDER);
+    for (i, &x) in input.iter().take(1234).enumerate() {
+        println!("Processing byte with index: {}, {}", i, x as char);
+        history_source.start_new_byte();
+        for bit_index in (0..7 + 1).rev() {
+            collected_states.reset();
+            history_source.gather_history_states(&mut collected_states);
+            if collected_states.items.len() > 0 {
+                print!("{}: ", bit_index);
+                print!("{:x}", collected_states.items[0]);
+                for i in 1..collected_states.items.len() {
+                    print!(", ");
+                    print!("{:x}", collected_states.items[i]);
+                }
+                println!();
+            }
+            let incoming_bit = get_bit(x, bit_index as i32) == 1;
+            history_source.process_input_bit(incoming_bit);
+        }
+        println!();
+    }
 }

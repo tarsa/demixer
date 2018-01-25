@@ -17,6 +17,45 @@
  */
 
 use std::ops;
+use ::CollectedBitHistories;
+
+pub struct TreeHistorySource {
+    tree: Tree,
+    active_contexts: ActiveContexts,
+    bit_index: usize,
+}
+
+impl ::HistorySource for TreeHistorySource {
+    fn new(input_size: usize, max_order: usize) -> TreeHistorySource {
+        let nodes = Nodes::new(input_size);
+        TreeHistorySource {
+            tree: Tree::new(nodes, input_size, 0),
+            active_contexts: ActiveContexts::new(max_order),
+            bit_index: 7,
+        }
+    }
+
+    fn start_new_byte(&mut self) {
+    }
+
+    fn gather_history_states(&self, bit_histories: &mut CollectedBitHistories) {
+        self.tree.gather_states(&self.active_contexts, bit_histories,
+                                self.bit_index);
+    }
+
+    fn process_input_bit(&mut self, input_bit: bool) {
+        let max_order = self.active_contexts.max_order();
+        self.tree.extend(&mut self.active_contexts, input_bit, self.bit_index,
+                         max_order);
+        if self.bit_index > 0 {
+            self.bit_index -= 1;
+        } else {
+            self.bit_index = 7;
+            self.tree.window_cursor += 1;
+            self.active_contexts.shift(&self.tree);
+        }
+    }
+}
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum Direction {
@@ -92,22 +131,6 @@ fn bytes_differ_on(first_byte_index: usize, second_byte_index: usize,
                    bit_index: usize, input_block: &[u8]) -> bool {
     get_bit(input_block[first_byte_index] ^ input_block[second_byte_index],
             bit_index)
-}
-
-pub struct CollectedBitHistories {
-    pub items: Vec<u32>, // TODO: wrap u32 in BitHistory
-}
-
-impl CollectedBitHistories {
-    pub fn new(max_order: usize) -> CollectedBitHistories {
-        CollectedBitHistories {
-            items: Vec::with_capacity(max_order + 1)
-        }
-    }
-
-    fn reset(&mut self) {
-        self.items.clear();
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
