@@ -15,8 +15,8 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 use std::ops;
+
 use ::CollectedBitHistories;
 
 pub struct TreeHistorySource {
@@ -304,7 +304,11 @@ impl Tree {
                                 )
                             }
                         };
-                    collected_states.items.push(bit_history);
+                    if bit_history != 1 {
+                        collected_states.items.push(bit_history);
+                    } else {
+                        assert_eq!(context.incoming_edge_visits_count, 0);
+                    }
                 }
             }
             TreeState::Degenerate => {
@@ -314,7 +318,7 @@ impl Tree {
                 for order in 0..count {
                     collected_states.items.push(
                         make_bit_run_history(
-                            count - order,
+                            self.window_cursor - order,
                             get_bit(self.window[0], bit_index))
                     );
                 }
