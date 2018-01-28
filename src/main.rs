@@ -82,7 +82,7 @@ fn print_bit_histories<Source: HistorySource>(input: &[u8]) {
                 }
                 println!();
             }
-            let incoming_bit = get_bit(x, bit_index as i32) == 1;
+            let incoming_bit = get_bit(x, bit_index);
             history_source.process_input_bit(incoming_bit);
         }
         println!();

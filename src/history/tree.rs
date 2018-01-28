@@ -25,6 +25,7 @@ use history::{
     HistorySource,
     ContextState,
     CollectedContextStates,
+    make_bit_run_history, updated_bit_history, get_bit, bytes_differ_on,
 };
 
 pub struct TreeHistorySource {
@@ -119,26 +120,6 @@ impl ops::Not for Direction {
             Direction::Right => Direction::Left,
         }
     }
-}
-
-fn make_bit_run_history(uncapped_length: usize, repeated_bit: bool) -> u32 {
-    let length = 10.min(uncapped_length);
-    let bit = repeated_bit as u32;
-    (1 << length) | (((1 << length) - 1) * bit)
-}
-
-fn updated_bit_history(bit_history: u32, next_bit: bool) -> u32 {
-    ((bit_history << 1) & 2047) | (next_bit as u32) | (bit_history & 1024)
-}
-
-fn get_bit(byte: u8, bit_index: usize) -> bool {
-    ((byte >> bit_index) & 1) == 1
-}
-
-fn bytes_differ_on(first_byte_index: usize, second_byte_index: usize,
-                   bit_index: usize, input_block: &[u8]) -> bool {
-    get_bit(input_block[first_byte_index] ^ input_block[second_byte_index],
-            bit_index)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -275,13 +256,15 @@ impl Tree {
             self.print_node(node.child(Direction::Left).to_node_index(),
                             depth + 1);
         } else {
-            println!("{}{}", "   ".repeat(depth + 1), node.child(Direction::Left).to_window_index().index);
+            println!("{}{}", "   ".repeat(depth + 1),
+                     node.child(Direction::Left).to_window_index().index);
         }
         if node.child(Direction::Right).is_node_index() {
             self.print_node(node.child(Direction::Right).to_node_index(),
                             depth + 1);
         } else {
-            println!("{}{}", "   ".repeat(depth + 1), node.child(Direction::Right).to_window_index().index);
+            println!("{}{}", "   ".repeat(depth + 1),
+                     node.child(Direction::Right).to_window_index().index);
         }
     }
 
@@ -588,7 +571,8 @@ struct Node {
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}'{}'{:b}", self.text_start(), self.depth(), self.history_state())
+        write!(f, "{}'{}'{:b}",
+               self.text_start(), self.depth(), self.history_state())
     }
 }
 

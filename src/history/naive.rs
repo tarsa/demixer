@@ -54,14 +54,14 @@ impl HistorySource for NaiveHistorySource {
             for scanned_index in 0..(self.input_cursor - order) {
                 let prefix_equal = compare_for_equal_prefix(
                     &self.input, scanned_index, self.input_cursor - order,
-                    self.bit_index as i32, order,
+                    self.bit_index, order,
                 );
                 if prefix_equal {
                     if first_occurrence_index_opt == None {
                         first_occurrence_index_opt = Some(scanned_index);
                     }
                     let next_bit = get_bit(self.input[scanned_index + order],
-                                           self.bit_index as i32);
+                                           self.bit_index);
                     bit_history = updated_bit_history(bit_history, next_bit);
                 }
             }

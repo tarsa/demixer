@@ -43,7 +43,7 @@ pub struct FatMapHistorySource {
 
 impl FatMapHistorySource {
     fn compute_hash(&self, order: usize) -> u64 {
-        let map = &self.maps[(order * 8) + (self.bit_index as usize)];
+        let map = &self.maps[(order * 8) + self.bit_index];
         let mut hasher: DefaultHasher = map.hasher().build_hasher();
         hasher.write(
             &self.input[self.input_cursor - order..self.input_cursor]);
@@ -74,14 +74,14 @@ impl HistorySource for FatMapHistorySource {
     fn gather_history_states(&self,
                              bit_histories: &mut CollectedContextStates) {
         for order in 0..(self.max_order.min(self.input_cursor) + 1) {
-            let map = &self.maps[(order * 8) + (self.bit_index as usize)];
+            let map = &self.maps[(order * 8) + self.bit_index];
             let hash = self.compute_hash(order);
             let vec_opt: Option<&Vec<_>> = map.get(&hash);
             match vec_opt.into_iter().
                 flat_map(|vec| vec.into_iter().find(|item| {
                     compare_for_equal_prefix(
                         &self.input, self.input_cursor - order,
-                        item.byte_index, self.bit_index as i32, order)
+                        item.byte_index, self.bit_index, order)
                 })).last() {
                 Some(ctx) =>
                     bit_histories.items.push(ContextState {
@@ -96,15 +96,15 @@ impl HistorySource for FatMapHistorySource {
     fn process_input_bit(&mut self, input_bit: bool) {
         for order in 0..(self.max_order.min(self.input_cursor) + 1) {
             let hash = self.compute_hash(order);
-            let map = &mut self.maps[(order * 8) + (self.bit_index as usize)];
+            let map = &mut self.maps[(order * 8) + self.bit_index];
             let vec: &mut Vec<_> = map.entry(hash).or_insert(Vec::new());
             let input = &self.input;
             let byte_index = self.input_cursor - order;
             let bit_index = self.bit_index;
             let found = vec.iter_mut().find(|item| compare_for_equal_prefix(
-                input, byte_index, item.byte_index, bit_index as i32, order)
+                input, byte_index, item.byte_index, bit_index, order)
             ).map(|ctx| ctx.bit_history =
-                updated_bit_history(ctx.bit_history, input_bit as u8)
+                updated_bit_history(ctx.bit_history, input_bit)
             ).is_some();
             if !found {
                 vec.push(LocalContextState {

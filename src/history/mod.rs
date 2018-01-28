@@ -63,22 +63,28 @@ pub trait HistorySource {
     fn process_input_bit(&mut self, input_bit: bool);
 }
 
-fn updated_bit_history(bit_history: u32, next_bit: u8) -> u32 {
+fn make_bit_run_history(uncapped_length: usize, repeated_bit: bool) -> u32 {
+    let length = 10.min(uncapped_length);
+    let bit = repeated_bit as u32;
+    (1 << length) | (((1 << length) - 1) * bit)
+}
+
+fn updated_bit_history(bit_history: u32, next_bit: bool) -> u32 {
     ((bit_history << 1) & 2047) | (next_bit as u32) | (bit_history & 1024)
 }
 
-pub fn get_bit(byte: u8, bit_index: i32) -> u8 {
-    (byte >> bit_index) & 1
+pub fn get_bit(byte: u8, bit_index: usize) -> bool {
+    ((byte >> bit_index) & 1) == 1
 }
 
-fn bytes_differ_on(contents: &[u8], first_byte_index: usize,
-                   second_byte_index: usize, bit_index: i32) -> bool {
-    get_bit(contents[first_byte_index] ^ contents[second_byte_index],
-            bit_index) == 1
+fn bytes_differ_on(first_byte_index: usize, second_byte_index: usize,
+                   bit_index: usize, input_block: &[u8]) -> bool {
+    get_bit(input_block[first_byte_index] ^ input_block[second_byte_index],
+            bit_index)
 }
 
 fn compare_for_equal_prefix(contents: &[u8], starting_index_first: usize,
-                            starting_index_second: usize, bit_index: i32,
+                            starting_index_second: usize, bit_index: usize,
                             full_byte_length: usize) -> bool {
     let mut equal = true;
     for position in 0..full_byte_length {
@@ -88,10 +94,9 @@ fn compare_for_equal_prefix(contents: &[u8], starting_index_first: usize,
     }
     let mut bit_position = 7;
     while equal && bit_position > bit_index {
-        equal &= !bytes_differ_on(contents,
-                                  starting_index_first + full_byte_length,
+        equal &= !bytes_differ_on(starting_index_first + full_byte_length,
                                   starting_index_second + full_byte_length,
-                                  bit_position);
+                                  bit_position, contents);
         bit_position -= 1;
     }
     equal
