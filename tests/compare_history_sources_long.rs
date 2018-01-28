@@ -54,8 +54,22 @@ fn compare_for_repeated_byte_input() {
 #[cfg(feature = "long_tests")]
 fn compare_for_two_symbols_sequences() {
     let symbols_pairs: &[(u8, u8)] =
-        &[(0, 255), ('a' as u8, 'b' as u8), (15, 215), (31, 32)];
+        &[(0, 255), ('b' as u8, 'a' as u8), (215, 15), (31, 32)];
     for &(sym_0, sym_1) in symbols_pairs.iter() {
+        // regularly interrupted runs
+        {
+            for &interruption_period in [2, 3, 4, 7, 10].iter() {
+                let mut input0 = vec![sym_0; interruption_period];
+                input0.push(sym_1);
+                let mut input1 = input0.clone();
+                while input1.len() < 300 {
+                    input1.append(&mut input0.clone());
+                }
+                for &max_order in [0, 1, 2, 3, 7, 20, 40, MAX_ORDER].iter() {
+                    compare_for_input(&input1, max_order, false);
+                }
+            }
+        }
         // fibonacci word
         {
             let mut word0 = vec![sym_0];

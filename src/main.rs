@@ -20,15 +20,15 @@ extern crate demixer;
 
 use std::io::prelude::*;
 
-use demixer::{
-    CollectedBitHistories,
+use demixer::MAX_ORDER;
+use demixer::history::{
+    CollectedContextStates,
     HistorySource,
-    NaiveHistorySource,
-    FatMapHistorySource,
-    MAX_ORDER,
     get_bit,
 };
-use demixer::tree::TreeHistorySource;
+use demixer::history::naive::NaiveHistorySource;
+use demixer::history::fat_map::FatMapHistorySource;
+use demixer::history::tree::TreeHistorySource;
 
 fn main() {
     print_banner();
@@ -64,7 +64,7 @@ fn print_banner() {
 
 fn print_bit_histories<Source: HistorySource>(input: &[u8]) {
     let mut collected_states =
-        CollectedBitHistories::new(MAX_ORDER);
+        CollectedContextStates::new(MAX_ORDER);
     let mut history_source =
         Source::new(input.len(), MAX_ORDER);
     for (i, &x) in input.iter().take(1234).enumerate() {
@@ -75,10 +75,10 @@ fn print_bit_histories<Source: HistorySource>(input: &[u8]) {
             history_source.gather_history_states(&mut collected_states);
             if collected_states.items().len() > 0 {
                 print!("{}: ", bit_index);
-                print!("{:x}", collected_states.items()[0]);
+                print!("{:x}", collected_states.items()[0].bit_history);
                 for i in 1..collected_states.items().len() {
                     print!(", ");
-                    print!("{:x}", collected_states.items()[i]);
+                    print!("{:x}", collected_states.items()[i].bit_history);
                 }
                 println!();
             }

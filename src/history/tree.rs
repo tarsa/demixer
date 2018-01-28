@@ -15,17 +15,25 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+extern crate core;
+
+use core::fmt;
 use std::ops;
 
-use ::CollectedBitHistories;
+use ::PRINT_DEBUG;
+use history::{
+    HistorySource,
+    ContextState,
+    CollectedContextStates,
+};
 
 pub struct TreeHistorySource {
-    tree: Tree,
-    active_contexts: ActiveContexts,
+    pub tree: Tree,
+    pub active_contexts: ActiveContexts,
     bit_index: usize,
 }
 
-impl ::HistorySource for TreeHistorySource {
+impl HistorySource for TreeHistorySource {
     fn new(input_size: usize, max_order: usize) -> TreeHistorySource {
         let nodes = Nodes::new(input_size);
         TreeHistorySource {
@@ -35,10 +43,10 @@ impl ::HistorySource for TreeHistorySource {
         }
     }
 
-    fn start_new_byte(&mut self) {
-    }
+    fn start_new_byte(&mut self) {}
 
-    fn gather_history_states(&self, bit_histories: &mut CollectedBitHistories) {
+    fn gather_history_states(&self,
+                             bit_histories: &mut CollectedContextStates) {
         self.tree.gather_states(&self.active_contexts, bit_histories,
                                 self.bit_index);
     }
@@ -57,7 +65,7 @@ impl ::HistorySource for TreeHistorySource {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum Direction {
     Left = 0,
     Right = 1,
@@ -141,6 +149,7 @@ enum TreeState {
     Degenerate,
 }
 
+#[derive(Debug)]
 pub struct Context {
     node_index: NodeIndex,
     incoming_edge_visits_count: i32,
@@ -182,6 +191,7 @@ impl Context {
     }
 }
 
+#[derive(Debug)]
 pub struct ActiveContexts {
     items: Vec<Context>,
 }
@@ -249,6 +259,32 @@ pub struct Tree {
 }
 
 impl Tree {
+    pub fn print(&self) {
+        match self.tree_state {
+            TreeState::Degenerate =>
+                println!("Empty tree"),
+            TreeState::Proper =>
+                self.print_node(NodeIndex::new(self.root_index), 0),
+        }
+    }
+
+    fn print_node(&self, node_index: NodeIndex, depth: usize) {
+        let node = self.nodes[node_index];
+        println!("{}{} = {}", "   ".repeat(depth), node, node_index.index);
+        if node.child(Direction::Left).is_node_index() {
+            self.print_node(node.child(Direction::Left).to_node_index(),
+                            depth + 1);
+        } else {
+            println!("{}{}", "   ".repeat(depth + 1), node.child(Direction::Left).to_window_index().index);
+        }
+        if node.child(Direction::Right).is_node_index() {
+            self.print_node(node.child(Direction::Right).to_node_index(),
+                            depth + 1);
+        } else {
+            println!("{}{}", "   ".repeat(depth + 1), node.child(Direction::Right).to_window_index().index);
+        }
+    }
+
     pub fn new(nodes: Nodes, window_size: usize, root_index: i32) -> Tree {
         assert!(window_size > 0);
         Tree {
@@ -269,7 +305,7 @@ impl Tree {
     }
 
     pub fn gather_states(&self, active_contexts: &ActiveContexts,
-                         collected_states: &mut CollectedBitHistories,
+                         collected_states: &mut CollectedContextStates,
                          bit_index: usize) {
         collected_states.reset();
         match self.tree_state {
@@ -278,34 +314,40 @@ impl Tree {
                 for (order, context) in
                     active_contexts.items.iter().enumerate() {
                     let node_index = context.node_index;
-                    let node = self.nodes[node_index];
-                    let bit_history =
+                    let node: Node = self.nodes[node_index];
+                    let (first_occurrence_index, bit_history) =
                         if node.depth() == order * 8 + 7 - bit_index {
-                            node.history_state()
+                            (node.text_start(), node.history_state())
                         } else {
                             assert_ne!(context.incoming_edge_visits_count, -1);
                             if context.in_leaf {
-                                make_bit_run_history(
+                                let first_occurrence_index = node
+                                    .child(context
+                                        .direction_from_parent.unwrap())
+                                    .to_window_index().index;
+                                let repeated_bit = get_bit(
+                                    self.window[order + first_occurrence_index],
+                                    bit_index);
+                                let bit_history = make_bit_run_history(
                                     context.incoming_edge_visits_count as usize,
-                                    get_bit(
-                                        self.window[order + node.child(context
-                                            .direction_from_parent.unwrap())
-                                            .to_window_index().index],
-                                        bit_index,
-                                    ),
-                                )
+                                    repeated_bit);
+                                (first_occurrence_index, bit_history)
                             } else {
-                                make_bit_run_history(
+                                let first_occurrence_index = node.text_start();
+                                let repeated_bit = get_bit(
+                                    self.window[order + first_occurrence_index],
+                                    bit_index);
+                                let bit_history = make_bit_run_history(
                                     context.incoming_edge_visits_count as usize,
-                                    get_bit(
-                                        self.window[order + node.text_start()],
-                                        bit_index,
-                                    ),
-                                )
+                                    repeated_bit);
+                                (first_occurrence_index, bit_history)
                             }
                         };
                     if bit_history != 1 {
-                        collected_states.items.push(bit_history);
+                        collected_states.items.push(ContextState {
+                            first_occurrence_index,
+                            bit_history,
+                        });
                     } else {
                         assert_eq!(context.incoming_edge_visits_count, 0);
                     }
@@ -316,11 +358,12 @@ impl Tree {
                 let count = (active_contexts.max_order() + 1)
                     .min(self.window_cursor);
                 for order in 0..count {
-                    collected_states.items.push(
-                        make_bit_run_history(
+                    collected_states.items.push(ContextState {
+                        first_occurrence_index: 0,
+                        bit_history: make_bit_run_history(
                             self.window_cursor - order,
-                            get_bit(self.window[0], bit_index))
-                    );
+                            get_bit(self.window[0], bit_index)),
+                    });
                 }
             }
         }
@@ -363,8 +406,9 @@ impl Tree {
                 assert_eq!(active_contexts.count(), 0);
                 if self.window_cursor > 0 && bytes_differ_on(
                     self.window_cursor - 1, self.window_cursor, bit_index,
-                    &self.window) {
-                    let order = max_order.min(self.window_cursor);
+                    &self.window,
+                ) {
+                    let order = max_order.min(self.window_cursor - 1);
                     self.split_degenerate_root_edge(order, bit_index);
                     self.tree_state = TreeState::Proper;
                 }
@@ -382,29 +426,42 @@ impl Tree {
             get_bit(self.window[self.window_cursor], bit_index).into();
         let node_index = context.node_index;
         if !context.in_leaf {
+            if PRINT_DEBUG { print!("SPLIT: internal edge"); }
             let new_node = self.nodes[node_index];
-            let mut node = self.setup_split_edge(context, context_order,
-                                                 bit_index);
-            node.children[direction] =
-                NodeChild::from_window_index(node.text_start());
+            if PRINT_DEBUG { print!(" = {}", new_node); }
+            let mut node = self.setup_split_edge(
+                context, context_order, bit_index, new_node.text_start());
+            node.children[direction] = NodeChild::from_window_index(
+                self.window_cursor - context_order);
             node.children[!direction] = self.nodes.add_node(new_node);
+            if PRINT_DEBUG {
+                print!(", new parent = {}, new child = {}", node, new_node);
+            }
             self.nodes.update_node(node_index, node);
         } else {
-            let mut new_node = self.setup_split_edge(context, context_order,
-                                                     bit_index);
+            if PRINT_DEBUG { print!("SPLIT: leaf edge"); }
             let mut node = self.nodes[node_index];
-            new_node.children[direction] =
-                NodeChild::from_window_index(new_node.text_start());
+            if PRINT_DEBUG { print!(" = {}", node); }
+            let mut new_node = self.setup_split_edge(
+                context, context_order, bit_index,
+                node.children[context.direction_from_parent.unwrap()]
+                    .to_window_index().index);
+            new_node.children[direction] = NodeChild::from_window_index(
+                self.window_cursor - context_order);
             new_node.children[!direction] =
                 node.children[context.direction_from_parent.unwrap()];
             node.children[context.direction_from_parent.unwrap()] =
                 self.nodes.add_node(new_node);
+            if PRINT_DEBUG {
+                print!(", new parent = {}, new child = {}", node, new_node);
+            }
             self.nodes.update_node(node_index, node);
         }
+        if PRINT_DEBUG { println!(", context = {:?}", context); }
     }
 
     fn setup_split_edge(&self, context: &Context, context_order: usize,
-                        bit_index: usize) -> Node {
+                        bit_index: usize, text_start: usize) -> Node {
         assert_ne!(context.incoming_edge_visits_count, -1);
         let incoming_edge_visits_count =
             context.incoming_edge_visits_count as usize;
@@ -412,7 +469,7 @@ impl Tree {
         let direction: Direction = bit.into();
         let bit_history = updated_bit_history(make_bit_run_history(
             incoming_edge_visits_count, !bit), bit);
-        Node::new(self.window_cursor - context_order,
+        Node::new(text_start,
                   context_order * 8 + 7 - bit_index,
                   direction.fold(|| 1, || incoming_edge_visits_count),
                   direction.fold(|| incoming_edge_visits_count, || 1),
@@ -422,6 +479,7 @@ impl Tree {
 
     fn split_degenerate_root_edge(&mut self, context_order: usize,
                                   bit_index: usize) {
+        if PRINT_DEBUG { println!("SPLIT: Splitting degenerate root edge"); }
         let bit = get_bit(self.window[self.window_cursor], bit_index);
         let direction: Direction = bit.into();
         let mut last_node_index = None;
@@ -437,7 +495,7 @@ impl Tree {
             let bit_history = updated_bit_history(make_bit_run_history(
                 self.window_cursor - current_context_order, !bit), bit);
             let node = Node::new(
-                self.window_cursor - current_context_order,
+                0,
                 current_context_order * 8 + 7 - bit_index,
                 direction.fold(|| 1, || 63.min(distance_to_end)),
                 direction.fold(|| 63.min(distance_to_end), || 1),
@@ -494,7 +552,7 @@ impl NodeChild {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct NodeIndex {
     index: usize
 }
@@ -526,6 +584,12 @@ struct Node {
     packed: u64,
     children: [NodeChild; 2],
     // counter: SimpleCounter,
+}
+
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}'{}'{:b}", self.text_start(), self.depth(), self.history_state())
+    }
 }
 
 impl Node {

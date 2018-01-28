@@ -17,22 +17,23 @@
  */
 extern crate demixer;
 
-use demixer::{
+use demixer::PRINT_DEBUG;
+use demixer::history::{
     HistorySource,
-    CollectedBitHistories,
-    NaiveHistorySource,
-    FatMapHistorySource,
+    CollectedContextStates,
 };
-use demixer::tree::TreeHistorySource;
+use demixer::history::naive::NaiveHistorySource;
+use demixer::history::fat_map::FatMapHistorySource;
+use demixer::history::tree::TreeHistorySource;
 
 pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
     let mut naive_source = NaiveHistorySource::new(input.len(), max_order);
     let mut fat_map_source = FatMapHistorySource::new(input.len(), max_order);
     let mut tree_source = TreeHistorySource::new(input.len(), max_order);
 
-    let mut naive_source_results = CollectedBitHistories::new(max_order);
-    let mut fat_map_source_results = CollectedBitHistories::new(max_order);
-    let mut tree_source_results = CollectedBitHistories::new(max_order);
+    let mut naive_source_results = CollectedContextStates::new(max_order);
+    let mut fat_map_source_results = CollectedContextStates::new(max_order);
+    let mut tree_source_results = CollectedContextStates::new(max_order);
 
     for (index, byte) in input.iter().enumerate() {
         if run_naive {
@@ -56,13 +57,22 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
             if run_naive {
                 assert_eq!(naive_source_results.items(),
                            fat_map_source_results.items(),
-                           "max order = {}, index = {}, bit index = {}",
-                           max_order, index, bit_index);
+                           "max order = {}, index = {}, bit index = {}, \
+                           input = {:?}",
+                           max_order, index, bit_index, input);
+            }
+            if PRINT_DEBUG {
+                println!("active contexts = {:?}", tree_source.active_contexts);
+                println!("max order = {}, index = {}, bit index = {}, \
+                       input = {:?}",
+                         max_order, index, bit_index, input);
+                tree_source.tree.print();
             }
             assert_eq!(fat_map_source_results.items(),
                        tree_source_results.items(),
-                       "max order = {}, index = {}, bit index = {}",
-                       max_order, index, bit_index);
+                       "max order = {}, index = {}, bit index = {}, \
+                       input = {:?}",
+                       max_order, index, bit_index, input);
 
             let input_bit = (byte & (1 << bit_index)) != 0;
             if run_naive {
