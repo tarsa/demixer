@@ -1,5 +1,14 @@
 # Releases
 
+### Version 0.4.0
+
+- Retrieving index of last occurrence of a context instead of first one
+
+### Version 0.3.0
+
+- Implemented retrieving index of first occurrence of a context when gathering
+  histories
+
 ### Version 0.2.0
 
 - Implemented bit history collection algorithms:

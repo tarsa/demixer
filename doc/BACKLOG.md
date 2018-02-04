@@ -1,10 +1,14 @@
 # Backlog
 
-- add retrieving index of first occurrence of a context
-  (as a preparation for next step) - DONE
-- replace it with retrieving index of last occurrence of a context
-  (which is the useful information)
+- implement integrity checking for active contexts
 - implement window sliding by removing the leftmost suffices one by one
+  - having a queue of leaves would be too memory consuming
+  - instead we start finding a leaf corresponding to first prefix by descending
+    straight from root
+  - tree has limited depth so it will not degenerate performance heavily
+  - one thing to check and possibly adjust is the longest active context
+  - first figure out how to emulate node removal in naive and fat map history
+    source implementations
 - add stationary counters to tree nodes (i.e. to the explicit, branching ones)
 - bit histories should have 12-bits (as they have now) but be always based
   on rich FSM with state attributes like: rescaling_happened, capped_run_length, 
@@ -33,6 +37,10 @@
   - CPU time statistics per thread
     - for Linux only (use conditional compilation)
     - libc crate doesn't have clock_gettime for Microsoft Windows OS
+  - flexible generic assignment of responsibilities to threads may be very hard
+    to implement (sounds like implementing materializers from Akka Streams)
+  - hardcoded schemes of data flow graphs for different thread configurations
+    sounds plausible
 - add replaying HistorySource (taking recorded data from disk)
   - consider it when gathering histories dominates CPU time even when using
     multi-threading

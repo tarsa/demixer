@@ -21,4 +21,4 @@ pub mod history;
 
 pub const MAX_ORDER: usize = 63;
 
-pub const PRINT_DEBUG: bool = false;
+pub const PRINT_DEBUG: bool = 2 + 2 == 5;

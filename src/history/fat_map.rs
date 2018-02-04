@@ -85,11 +85,11 @@ impl HistorySource for FatMapHistorySource {
                 })).last() {
                 Some(ctx) =>
                     bit_histories.items.push(ContextState {
-                        first_occurrence_index: ctx.byte_index,
+                        last_occurrence_index: ctx.byte_index,
                         bit_history: ctx.bit_history,
                     }),
                 None => break,
-            };
+            }
         }
     }
 
@@ -103,15 +103,17 @@ impl HistorySource for FatMapHistorySource {
             let bit_index = self.bit_index;
             let found = vec.iter_mut().find(|item| compare_for_equal_prefix(
                 input, byte_index, item.byte_index, bit_index, order)
-            ).map(|ctx| ctx.bit_history =
-                updated_bit_history(ctx.bit_history, input_bit)
-            ).is_some();
+            ).map(|ctx| {
+                ctx.byte_index = byte_index;
+                ctx.bit_history =
+                    updated_bit_history(ctx.bit_history, input_bit);
+            }).is_some();
             if !found {
                 vec.push(LocalContextState {
                     byte_index,
                     bit_history: 2 + input_bit as u32,
                 });
-            };
+            }
         }
         self.input[self.input_cursor] |= (input_bit as u8) << self.bit_index;
         if self.bit_index > 0 {

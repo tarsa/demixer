@@ -98,3 +98,68 @@ fn compare_for_multi_symbol_sequences() {
         }
     }
 }
+
+#[test]
+fn compare_for_repeated_byte_borders() {
+    let border_and_middle_starter_symbols: &[(u8, u8)] =
+        &[(0, 128), ('z' as u8, 'a' as u8), (215, 15), (31, 32)];
+    for &(border_sym, middle_sym) in border_and_middle_starter_symbols.iter() {
+        let mut middle = vec![middle_sym];
+        let mut next_symbol: u8 = middle_sym + 1;
+        while middle.len() < 10 {
+            let mut clone = middle.clone();
+            middle.append(&mut clone);
+            middle.push(next_symbol);
+            next_symbol += 1;
+        }
+        for &max_order in [0, 1, 2, 3, 7, 20].iter() {
+            for &left_border_length in [1, 2, 3, 7].iter() {
+                for &right_border_length in [1, 2, 3, 7].iter() {
+                    let mut word = vec![border_sym; left_border_length];
+                    word.append(&mut middle.clone());
+                    word.append(&mut vec![border_sym; right_border_length]);
+                    compare_for_input(&word, max_order, true);
+                }
+            }
+        }
+        assert!(middle.len() >= 10);
+    }
+}
+
+#[test]
+fn compare_for_repeated_pattern_borders() {
+    let border_and_middle_starter_symbols: &[(u8, u8, u8)] =
+        &[(0, 255, 128), ('z' as u8, 'v' as u8, 'a' as u8), (31, 32, 215)];
+    for &(border_sym_0, border_sym_1, middle_sym)
+        in border_and_middle_starter_symbols.iter() {
+        let mut middle = vec![middle_sym];
+        let mut next_symbol: u8 = middle_sym + 1;
+        while middle.len() < 10 {
+            let mut clone = middle.clone();
+            middle.append(&mut clone);
+            middle.push(next_symbol);
+            next_symbol += 1;
+        }
+        for &interruption_period in [1, 2, 3].iter() {
+            let mut border = vec![border_sym_0; interruption_period];
+            border.push(border_sym_1);
+            while border.len() < 10 {
+                let mut clone = border.clone();
+                border.append(&mut clone);
+            }
+            for &max_order in [0, 1, 2, 3, 7, 20].iter() {
+                for &left_border_length in [1, 2, 3].iter() {
+                    for &right_border_length in [1, 2, 3].iter() {
+                        let mut word = Vec::new();
+                        word.extend_from_slice(&border[..left_border_length]);
+                        word.append(&mut middle.clone());
+                        word.extend_from_slice(&border[..right_border_length]);
+                        compare_for_input(&word, max_order, true);
+                    }
+                }
+            }
+            assert!(border.len() >= 10);
+        }
+        assert!(middle.len() >= 10);
+    }
+}

@@ -22,7 +22,7 @@ pub mod tree;
 #[derive(Debug, Eq, PartialEq)]
 pub struct ContextState {
     // TODO wrap in WindowIndex
-    pub first_occurrence_index: usize,
+    pub last_occurrence_index: usize,
     // TODO wrap in BitHistory
     pub bit_history: u32,
 }

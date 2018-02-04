@@ -36,11 +36,16 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
     let mut tree_source_results = CollectedContextStates::new(max_order);
 
     for (index, byte) in input.iter().enumerate() {
+        tree_source.tree.check_integrity(max_order);
         if run_naive {
             naive_source.start_new_byte();
         }
         fat_map_source.start_new_byte();
         tree_source.start_new_byte();
+        if PRINT_DEBUG {
+            println!("started byte #{}, max order = {}", index, max_order);
+            tree_source.tree.print();
+        }
 
         for bit_index in (0..7 + 1).rev() {
             if run_naive {
@@ -57,29 +62,27 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
             if run_naive {
                 assert_eq!(naive_source_results.items(),
                            fat_map_source_results.items(),
-                           "max order = {}, index = {}, bit index = {}, \
-                           input = {:?}",
-                           max_order, index, bit_index, input);
+                           "index = {}, bit index = {}, input = {:?}",
+                           index, bit_index, input);
             }
             if PRINT_DEBUG {
-                println!("active contexts = {:?}", tree_source.active_contexts);
-                println!("max order = {}, index = {}, bit index = {}, \
-                       input = {:?}",
-                         max_order, index, bit_index, input);
-                tree_source.tree.print();
+                println!("active contexts = {}", tree_source.active_contexts);
+                println!("before: index = {}, bit index = {}, input = {:?}",
+                         index, bit_index, input);
             }
             assert_eq!(fat_map_source_results.items(),
                        tree_source_results.items(),
-                       "max order = {}, index = {}, bit index = {}, \
-                       input = {:?}",
-                       max_order, index, bit_index, input);
+                       "index = {}, bit index = {}, input = {:?}",
+                       index, bit_index, input);
 
             let input_bit = (byte & (1 << bit_index)) != 0;
+            if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             if run_naive {
                 naive_source.process_input_bit(input_bit);
             }
             fat_map_source.process_input_bit(input_bit);
             tree_source.process_input_bit(input_bit);
+            if PRINT_DEBUG { println!(); }
         }
     }
 }
