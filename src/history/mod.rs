@@ -53,7 +53,7 @@ impl CollectedContextStates {
 }
 
 pub trait HistorySource {
-    fn new(input_size: usize, max_order: usize) -> Self;
+    fn new(max_window_size: usize, max_order: usize) -> Self;
 
     fn start_new_byte(&mut self);
 

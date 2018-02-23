@@ -105,6 +105,7 @@ fn compare_for_multi_symbol_sequences() {
 }
 
 #[test]
+#[cfg(feature = "long_tests")]
 fn compare_for_repeated_byte_borders() {
     let border_and_middle_starter_symbols: &[(u8, u8)] =
         &[(0, 128), ('z' as u8, 'a' as u8), (215, 15), (31, 32)];
@@ -132,6 +133,7 @@ fn compare_for_repeated_byte_borders() {
 }
 
 #[test]
+#[cfg(feature = "long_tests")]
 fn compare_for_repeated_pattern_borders() {
     let border_and_middle_starter_symbols: &[(u8, u8, u8)] =
         &[(0, 255, 128), ('z' as u8, 'v' as u8, 'a' as u8), (31, 32, 215)];

@@ -30,9 +30,9 @@ pub struct NaiveHistorySource {
 }
 
 impl HistorySource for NaiveHistorySource {
-    fn new(input_size: usize, max_order: usize) -> NaiveHistorySource {
+    fn new(max_window_size: usize, max_order: usize) -> NaiveHistorySource {
         NaiveHistorySource {
-            input: Vec::with_capacity(input_size),
+            input: Vec::with_capacity(max_window_size),
             input_cursor: 0,
             bit_index: 7,
             max_order,
@@ -42,7 +42,8 @@ impl HistorySource for NaiveHistorySource {
     fn start_new_byte(&mut self) {
         assert_eq!(self.bit_index, 7);
         assert_eq!(self.input_cursor, self.input.len());
-        assert_ne!(self.input.len(), self.input.capacity());
+        assert_ne!(self.input.len(), self.input.capacity(),
+                   "input window is filled up, but sliding is not implemented");
         self.input.push(0);
     }
 

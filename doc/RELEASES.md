@@ -1,5 +1,12 @@
 # Releases
 
+### Version 0.5.0
+
+- Implemented window sliding for tree based history source
+  - reusing removed tree nodes is not implemented yet
+  - cycling window buffer is also not implemented
+  - these things will be done in subsequent releases
+
 ### Version 0.4.0
 
 - Retrieving index of last occurrence of a context instead of first one

@@ -1,14 +1,32 @@
 # Backlog
 
-- implement integrity checking for active contexts
+- refactor
+  - split big files into smaller ones (like splitting mod.rs)
+  - take into account visibility and mutability
+- improve test infrastructure
+  - Rust's release mode disables numeric overflow and underflow checking
+    - don't disable them in tests
+  - split test into multiple categories to save time on developing isolated
+    features
 - implement window sliding by removing the leftmost suffices one by one
   - having a queue of leaves would be too memory consuming
   - instead we start finding a leaf corresponding to first prefix by descending
     straight from root
   - tree has limited depth so it will not degenerate performance heavily
   - one thing to check and possibly adjust is the longest active context
-  - first figure out how to emulate node removal in naive and fat map history
-    source implementations
+  - emulating node removal in naive and fat map history source implementations
+    seems infeasible
+  - instead keep and check as much invariants as possible
+  - also keep the removal code as simple as possible
+  - make verification tests that compares trees over identical windows but with
+    different number of past dropped input symbols
+  - such trees should have identical shape, have text indexes directly related
+    (shifted by dropped input symbols number) but have possibly different edge
+    counts and bit histories
+  - implement window sliding in steps
+    - step 1: removing longest prefixes one by one
+    - step 2: reusing nodes (before that use over-provisioning)
+    - step 3: cycling window buffer (before that use over-provisioning)
 - add stationary counters to tree nodes (i.e. to the explicit, branching ones)
 - bit histories should have 12-bits (as they have now) but be always based
   on rich FSM with state attributes like: rescaling_happened, capped_run_length, 
@@ -41,17 +59,3 @@
     to implement (sounds like implementing materializers from Akka Streams)
   - hardcoded schemes of data flow graphs for different thread configurations
     sounds plausible
-- add replaying HistorySource (taking recorded data from disk)
-  - consider it when gathering histories dominates CPU time even when using
-    multi-threading
-  - special handling will be needed for stationary counters
-  - stationary counters are dynamically initialized
-  - therefore we would need to index each stationary counter in the tree
-  - later the index must be mapped to actual counter using separate HashMap
-    during both recording and replaying
-  - when a node is created we must record the current run length along with
-    new counter index
-  - when a node is updated we only need to record the counter index
-  - when a node is deleted we also need to record the counter index
-  - alternatively we can hardcode stationary counters values in the recording
-    - that would be way faster to replay

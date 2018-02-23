@@ -19,6 +19,7 @@ extern crate core;
 
 use core::fmt;
 use std::ops;
+use std::collections::HashMap;
 
 use ::PRINT_DEBUG;
 use history::{
@@ -29,6 +30,10 @@ use history::{
     compare_for_equal_prefix,
 };
 
+// TODO remove over-provisioning and replace with full window sliding support
+const OVER_PROVISIONING_FACTOR: usize = 20;
+const OVER_PROVISIONING_CONSTANT: usize = 100;
+
 pub struct TreeHistorySource {
     pub tree: Tree,
     pub active_contexts: ActiveContexts,
@@ -36,10 +41,11 @@ pub struct TreeHistorySource {
 }
 
 impl HistorySource for TreeHistorySource {
-    fn new(input_size: usize, max_order: usize) -> TreeHistorySource {
-        let nodes = Nodes::new(input_size);
+    fn new(max_window_size: usize, max_order: usize) -> TreeHistorySource {
+        let nodes = Nodes::new(max_window_size * OVER_PROVISIONING_FACTOR +
+            OVER_PROVISIONING_CONSTANT);
         TreeHistorySource {
-            tree: Tree::new(nodes, input_size, 0),
+            tree: Tree::new(nodes, max_window_size, 0),
             active_contexts: ActiveContexts::new(max_order),
             bit_index: 7,
         }
@@ -48,6 +54,7 @@ impl HistorySource for TreeHistorySource {
     fn start_new_byte(&mut self) {
         assert_eq!(self.bit_index, 7);
         self.active_contexts.shift(&mut self.tree);
+        self.tree.start_new_byte(&mut self.active_contexts);
     }
 
     fn gather_history_states(&self,
@@ -69,8 +76,8 @@ impl HistorySource for TreeHistorySource {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
-enum Direction {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Direction {
     Left = 0,
     Right = 1,
 }
@@ -126,13 +133,14 @@ impl ops::Not for Direction {
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum TreeState {
+pub enum TreeState {
     /** Every inner node has two leaves */
     Proper,
     /** Has only invalid root node, happens when all symbols are identical */
     Degenerate,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Context {
     suffix_index: WindowIndex,
     node_index: NodeIndex,
@@ -174,6 +182,17 @@ impl Context {
             println!("DESCEND, order = {}, after = {}", order, self);
         }
     }
+
+    pub fn prepare_for_test(&self, offset: usize) -> Context {
+        Context {
+            suffix_index: WindowIndex {
+                index: self.suffix_index.index - offset
+            },
+            node_index: NodeIndex::new(<i32>::max_value()),
+            incoming_edge_visits_count: 0,
+            ..self.clone()
+        }
+    }
 }
 
 impl fmt::Display for Context {
@@ -188,6 +207,7 @@ impl fmt::Display for Context {
     }
 }
 
+#[derive(Debug)]
 pub struct ActiveContexts {
     items: Vec<Context>,
 }
@@ -232,6 +252,46 @@ impl ActiveContexts {
     fn keep_only(&mut self, count: usize) {
         self.items.split_off(count);
     }
+
+    pub fn items(&self) -> &[Context] {
+        &self.items
+    }
+
+    pub fn check_integrity(&self, tree: &Tree) {
+        if tree.tree_state == TreeState::Proper {
+            let mut contexts_suffixes_map = HashMap::new();
+            for ctx in self.items.iter() {
+                contexts_suffixes_map.insert(ctx.node_index.index,
+                                             ctx.suffix_index.index);
+            }
+            let mut stack = Vec::new();
+            stack.push(tree.get_root_node_index());
+            while let Some(node_index) = stack.pop() {
+                let node = tree.nodes[node_index];
+                let node_text_start = *contexts_suffixes_map
+                    .get(&node_index.index).unwrap_or(&node.text_start());
+                let full_byte_length = (node.depth / 8) as usize;
+                let bit_index = 7 - (node.depth % 8) as usize;
+                let children = tree.nodes.items[node_index.index].children;
+                for child in children.iter() {
+                    assert!(child.is_valid());
+                    if child.is_node_index() {
+                        let child_node = tree.nodes[child.to_node_index()];
+                        assert!(compare_for_equal_prefix(
+                            &tree.window, node_text_start,
+                            child_node.text_start(),
+                            bit_index, full_byte_length));
+                        stack.push(child.to_node_index());
+                    } else {
+                        assert!(compare_for_equal_prefix(
+                            &tree.window, node_text_start,
+                            child.to_window_index().index,
+                            bit_index, full_byte_length));
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl ops::Index<usize> for ActiveContexts {
@@ -264,14 +324,183 @@ impl fmt::Display for ActiveContexts {
 pub struct Tree {
     nodes: Nodes,
     window: Vec<u8>,
+    window_start: usize,
     pub window_cursor: usize,
-    tree_state: TreeState,
+    pub window_size: usize,
+    max_window_size: usize,
+    pub tree_state: TreeState,
     root_index: i32,
 }
 
 impl Tree {
+    fn start_new_byte(&mut self, active_contexts: &mut ActiveContexts) {
+        if self.window_size == self.max_window_size {
+            assert_eq!(self.window_start + self.max_window_size,
+                       self.window_cursor);
+            assert_eq!(self.window_cursor, self.window.len());
+            self.remove_leftmost_suffix(active_contexts);
+        } else {
+            assert!(self.window_size < self.max_window_size);
+        }
+        self.window.push(0);
+        self.window_size += 1;
+    }
+
+    pub fn remove_leftmost_suffix(&mut self,
+                                  active_contexts: &mut ActiveContexts) {
+        if self.tree_state == TreeState::Degenerate {
+            self.window[self.window_start] = 0;
+            self.window_start += 1;
+            self.window_size -= 1;
+            return;
+        }
+        let mut parent_node_index_opt = None;
+        let mut node_direction_opt = None;
+        let mut node_index = self.get_root_node_index();
+        let mut leaf_direction_opt = None;
+        let mut leaf_sibling_opt = None;
+        while leaf_direction_opt == None {
+            let depth = self.nodes[node_index].depth();
+            let direction: Direction = get_bit(
+                self.window[self.window_start + depth / 8], 7 - (depth % 8),
+            ).into();
+            let child = self.nodes[node_index].child(direction);
+            if child.is_node_index() {
+                parent_node_index_opt = Some(node_index);
+                node_direction_opt = Some(direction);
+                node_index = child.to_node_index();
+            } else {
+                leaf_direction_opt = Some(direction);
+                leaf_sibling_opt =
+                    Some(self.nodes[node_index].child(!direction));
+            }
+        }
+        let leaf_direction = leaf_direction_opt.unwrap();
+        let leaf_sibling = leaf_sibling_opt.unwrap();
+        let leaf_window_index = self.nodes[node_index].child(leaf_direction)
+            .to_window_index();
+        let node_found_in_active_contexts = active_contexts.items.iter()
+            .find(|ctx| ctx.node_index.index == node_index.index).is_some();
+        if PRINT_DEBUG { print!("DELETING: "); }
+        if leaf_window_index.index > self.window_start {
+            if PRINT_DEBUG {
+                println!("skipped because prefix was repeated");
+                println!("window start = {}, active contexts = {}",
+                         self.window_start, active_contexts);
+            }
+            let mut new_active_contexts_count = active_contexts.count();
+            for (order, ctx) in active_contexts.items.iter().enumerate().rev() {
+                assert!(ctx.suffix_index.index >= self.window_start);
+                if ctx.suffix_index.index == self.window_start {
+                    new_active_contexts_count -= 1;
+                    assert_eq!(new_active_contexts_count, order);
+                }
+            }
+            active_contexts.keep_only(new_active_contexts_count);
+        } else if node_index.is_root() {
+            let root_index = node_index;
+            assert_eq!(parent_node_index_opt, None);
+            assert_eq!(node_direction_opt, None);
+            if leaf_sibling.is_node_index() {
+                let leaf_sibling_node_index = leaf_sibling.to_node_index();
+                for ctx in active_contexts.items.iter_mut() {
+                    if ctx.node_index == leaf_sibling_node_index {
+                        ctx.node_index = root_index;
+                    }
+                }
+                if PRINT_DEBUG {
+                    println!("root node child = {:?}", leaf_direction);
+                }
+                assert!(leaf_sibling.is_node_index());
+                let leaf_sibling_node_index = leaf_sibling.to_node_index();
+                let mut leaf_sibling_node =
+                    self.nodes[leaf_sibling_node_index];
+                leaf_sibling_node.text_start =
+                    self.nodes[root_index].text_start;
+                self.nodes.update_node(root_index, leaf_sibling_node);
+                self.nodes.delete_node(leaf_sibling_node_index);
+                if PRINT_DEBUG { self.print(); }
+            } else {
+                if PRINT_DEBUG {
+                    println!("root node and changing tree state to degenerate");
+                }
+                self.tree_state = TreeState::Degenerate;
+                active_contexts.keep_only(0);
+                self.nodes.update_node(root_index, Node::INVALID);
+            }
+        } else if node_found_in_active_contexts {
+            assert!(!node_index.is_root());
+            let leaf_found_in_active_contexts = active_contexts.items.iter()
+                .find(|ctx| ctx.node_index.index == node_index.index &&
+                    ctx.direction_from_parent == Some(leaf_direction) &&
+                    ctx.in_leaf == true).is_some();
+            assert!(!leaf_found_in_active_contexts,
+                    "triggered situation assumed to be impossible");
+            if PRINT_DEBUG {
+                println!("child = {:?} (not in active contexts) \
+                          of node = {:?} (in active contexts)",
+                         leaf_direction, node_index);
+                println!("active contexts = {}", active_contexts);
+            }
+            let parent_node_index = parent_node_index_opt.unwrap();
+            let node_direction = node_direction_opt.unwrap();
+            if leaf_sibling.is_window_index() {
+                for ctx in active_contexts.items.iter_mut() {
+                    if ctx.node_index == node_index {
+                        if PRINT_DEBUG { print!("converted ctx = {} ", ctx); }
+                        ctx.node_index = parent_node_index;
+                        ctx.direction_from_parent = Some(node_direction);
+                        ctx.in_leaf = true;
+                        if PRINT_DEBUG { println!("to context {}", ctx); }
+                    }
+                }
+                self.nodes[parent_node_index].children[node_direction] =
+                    NodeChild::from_window_index(
+                        self.nodes[node_index].text_start());
+            } else {
+                let leaf_sibling_node_index = leaf_sibling.to_node_index();
+                for ctx in active_contexts.items.iter_mut() {
+                    if ctx.node_index == node_index {
+                        if PRINT_DEBUG { print!("converted ctx = {} ", ctx); }
+                        ctx.node_index = leaf_sibling_node_index;
+                        ctx.direction_from_parent = Some(node_direction);
+                        ctx.in_leaf = false;
+                        if PRINT_DEBUG { println!("to context {}", ctx); }
+                    }
+                }
+                let mut leaf_sibling_node =
+                    self.nodes[leaf_sibling_node_index];
+                leaf_sibling_node.text_start =
+                    self.nodes[node_index].text_start;
+                self.nodes.update_node(leaf_sibling_node_index,
+                                       leaf_sibling_node);
+                self.nodes[parent_node_index].children[node_direction] =
+                    leaf_sibling;
+            }
+            self.nodes.delete_node(node_index);
+            if PRINT_DEBUG { self.print(); }
+        } else {
+            if PRINT_DEBUG {
+                println!("child = {:?} of node = {:?} not in active contexts",
+                         leaf_direction, node_index);
+                println!("active contexts = {}", active_contexts);
+            }
+            assert!(!node_index.is_root());
+            assert!(!node_found_in_active_contexts);
+            let parent_node_index = parent_node_index_opt.unwrap();
+            let node_direction = node_direction_opt.unwrap();
+            self.nodes[parent_node_index].children[node_direction] =
+                leaf_sibling;
+            self.nodes.delete_node(node_index);
+            if PRINT_DEBUG { self.print(); }
+        }
+        self.window[self.window_start] = 0;
+        self.window_start += 1;
+        self.window_size -= 1;
+    }
+
     pub fn check_integrity(&self, max_order: usize) {
-        for suffix_start in 0..self.window_cursor {
+        for suffix_start in self.window_start..self.window_cursor {
             let mut node_index_opt =
                 match self.tree_state {
                     TreeState::Proper => Some(self.get_root_node_index()),
@@ -283,13 +512,11 @@ impl Tree {
                 assert!(suffix_start <= node.text_start());
                 if node.text_start() * 8 + node.depth() >=
                     self.window_cursor * 8 {
-                    assert!(
-                      compare_for_equal_prefix(
-                          &self.window, suffix_start, node.text_start(), 7,
-                          self.window_cursor - node.text_start()
-                      )
-                    );
-                    if PRINT_DEBUG { println!("CHECK early exit"); }
+                    assert!(compare_for_equal_prefix(
+                        &self.window, suffix_start, node.text_start(), 7,
+                        self.window_cursor - node.text_start(),
+                    ));
+//                    if PRINT_DEBUG { println!("CHECK early exit"); }
                     break;
                 }
                 let full_byte_length = (node.depth / 8) as usize;
@@ -313,7 +540,7 @@ impl Tree {
                 let child = node.child(bit.into());
                 if child.is_node_index() {
                     node_index_opt = Some(child.to_node_index());
-                    if PRINT_DEBUG { println!("CHECK descend"); }
+//                    if PRINT_DEBUG { println!("CHECK descend"); }
                 } else {
                     let leaf_index = child.to_window_index().index;
                     assert!(suffix_start <= leaf_index);
@@ -324,9 +551,29 @@ impl Tree {
                         "suffix start = {}, leaf index = {}, window pos = {}",
                         suffix_start, leaf_index, self.window_cursor);
                     node_index_opt = None;
-                    if PRINT_DEBUG { println!("CHECK leaf"); }
+//                    if PRINT_DEBUG { println!("CHECK leaf"); }
                 }
             }
+        }
+        if self.tree_state == TreeState::Proper {
+            let mut suffices_counters = vec![0; self.window_size];
+            let mut stack = Vec::new();
+            stack.push(self.get_root_node_index());
+            while let Some(node_index) = stack.pop() {
+                let children = self.nodes.items[node_index.index].children;
+                for child in children.iter() {
+                    assert!(child.is_valid());
+                    if child.is_node_index() {
+                        stack.push(child.to_node_index());
+                    } else {
+                        let window_offset =
+                            child.to_window_index().index - self.window_start;
+                        suffices_counters[window_offset] += 1;
+                    }
+                }
+            }
+            assert!(suffices_counters.iter().all(|&counter| counter <= 1),
+                    "suffices counters = {:?}", suffices_counters);
         }
     }
 
@@ -341,6 +588,7 @@ impl Tree {
 
     fn print_node(&self, node_index: NodeIndex, depth: usize) {
         let node = self.nodes[node_index];
+        assert!(node.is_valid());
         println!("{}{} = {}", "   ".repeat(depth), node, node_index.index);
         if node.child(Direction::Left).is_node_index() {
             self.print_node(node.child(Direction::Left).to_node_index(),
@@ -358,22 +606,26 @@ impl Tree {
         }
     }
 
-    pub fn new(nodes: Nodes, window_size: usize, root_index: i32) -> Tree {
-        assert!(window_size > 0);
+    pub fn new(nodes: Nodes, max_window_size: usize, root_index: i32) -> Tree {
+        assert!(max_window_size > 0);
         Tree {
             nodes,
-            window: vec![0; window_size],
+            window: Vec::with_capacity(
+                max_window_size * OVER_PROVISIONING_FACTOR),
+            window_start: 0,
             window_cursor: 0,
+            window_size: 0,
+            max_window_size,
             tree_state: TreeState::Degenerate,
             root_index,
         }
     }
 
-    fn get_root_node_index(&self) -> NodeIndex {
+    pub fn get_root_node_index(&self) -> NodeIndex {
         NodeIndex::new(self.root_index)
     }
 
-    fn nodes(&self) -> &Nodes {
+    pub fn nodes(&self) -> &Nodes {
         &self.nodes
     }
 
@@ -383,7 +635,7 @@ impl Tree {
         collected_states.reset();
         match self.tree_state {
             TreeState::Proper => {
-                assert_ne!(self.window_cursor, 0);
+                assert!(self.window_cursor > self.window_start);
                 for (order, context) in
                     active_contexts.items.iter().enumerate() {
                     let node: Node = self.nodes[context.node_index];
@@ -414,13 +666,13 @@ impl Tree {
             TreeState::Degenerate => {
                 assert_eq!(active_contexts.count(), 0);
                 let count = (active_contexts.max_order() + 1)
-                    .min(self.window_cursor);
+                    .min(self.window_size - 1);
                 for order in 0..count {
                     collected_states.items.push(ContextState {
                         last_occurrence_index: self.window_cursor - order - 1,
                         bit_history: make_bit_run_history(
-                            self.window_cursor - order,
-                            get_bit(self.window[0], bit_index)),
+                            self.window_size - order - 1,
+                            get_bit(self.window[self.window_start], bit_index)),
                     });
                 }
             }
@@ -457,8 +709,10 @@ impl Tree {
                         context.suffix_index.index + order,
                         self.window_cursor, bit_index, &self.window,
                     ) {
-                        assert!(context.in_leaf ||
-                            self.nodes()[node_index].depth() >= order * 8);
+                        assert!(
+                            context.in_leaf || self.nodes()[node_index].depth()
+                                >= order * 8,
+                            "order = {}, context = {}", order, context);
                         self.split_edge(&context, order, bit_index);
                         if PRINT_DEBUG { self.print(); }
                         assert_eq!(count - 1, order);
@@ -469,11 +723,11 @@ impl Tree {
             }
             TreeState::Degenerate => {
                 assert_eq!(active_contexts.count(), 0);
-                if self.window_cursor > 0 && bytes_differ_on(
+                if self.window_size >= 2 && bytes_differ_on(
                     self.window_cursor - 1, self.window_cursor, bit_index,
                     &self.window,
                 ) {
-                    let order = max_order.min(self.window_cursor - 1);
+                    let order = max_order.min(self.window_size - 2);
                     self.split_degenerate_root_edge(order, bit_index);
                     self.tree_state = TreeState::Proper;
                     if PRINT_DEBUG { self.print(); }
@@ -589,7 +843,7 @@ impl Tree {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct NodeChild {
+pub struct NodeChild {
     index: i32
 }
 
@@ -607,15 +861,15 @@ impl NodeChild {
         NodeChild { index: !(node_index as i32) }
     }
 
-//    fn is_valid(&self) -> bool {
-//        self.index >= 0 || (!self.index) as usize >= Nodes::NUM_ROOTS
-//    }
+    fn is_valid(&self) -> bool {
+        self.index >= 0 || (!self.index) as usize >= Nodes::NUM_ROOTS
+    }
 
-    fn is_window_index(&self) -> bool {
+    pub fn is_window_index(&self) -> bool {
         self.index >= 0
     }
 
-    fn is_node_index(&self) -> bool {
+    pub fn is_node_index(&self) -> bool {
         self.index < 0
     }
 
@@ -623,13 +877,13 @@ impl NodeChild {
         WindowIndex::new(self.index)
     }
 
-    fn to_node_index(&self) -> NodeIndex {
+    pub fn to_node_index(&self) -> NodeIndex {
         NodeIndex::new(!self.index)
     }
 }
 
-#[derive(Clone, Copy)]
-struct NodeIndex {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NodeIndex {
     index: usize
 }
 
@@ -639,11 +893,12 @@ impl NodeIndex {
         NodeIndex { index: index as usize }
     }
 
-//    fn is_root(&self) -> bool {
-//        self.index < Nodes::NUM_ROOTS
-//    }
+    fn is_root(&self) -> bool {
+        self.index < Nodes::NUM_ROOTS
+    }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct WindowIndex {
     index: usize
 }
@@ -656,7 +911,7 @@ impl WindowIndex {
 }
 
 #[derive(Clone, Copy)]
-struct Node {
+pub struct Node {
     children: [NodeChild; 2],
     // counter: SimpleCounter,
     text_start: u32,
@@ -699,11 +954,11 @@ impl Node {
             self.children[1] != NodeChild::INVALID
     }
 
-    fn text_start(&self) -> usize {
+    pub fn text_start(&self) -> usize {
         self.text_start as usize
     }
 
-    fn depth(&self) -> usize {
+    pub fn depth(&self) -> usize {
         self.depth as usize
     }
 
@@ -719,7 +974,7 @@ impl Node {
         self.history_state as u32
     }
 
-    fn child(&self, direction: Direction) -> NodeChild {
+    pub fn child(&self, direction: Direction) -> NodeChild {
         self.children[direction]
     }
 
@@ -737,13 +992,15 @@ impl Node {
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}'{}'{:b}",
-               self.text_start(), self.depth(), self.history_state())
+        write!(f, "{}'{}'{:b}'l({})r({})",
+               self.text_start(), self.depth(), self.history_state(),
+               self.left_count(), self.right_count())
     }
 }
 
 pub struct Nodes {
     items: Vec<Node>,
+    removed_nodes_count: usize, // no real removal yet
 }
 
 impl Nodes {
@@ -753,7 +1010,7 @@ impl Nodes {
         assert!(nodes_limit >= Nodes::NUM_ROOTS);
         let mut items = Vec::with_capacity(nodes_limit);
         (0..Nodes::NUM_ROOTS).for_each(|_| items.push(Node::INVALID));
-        Nodes { items }
+        Nodes { items, removed_nodes_count: 0 }
     }
 
     fn add_node(&mut self, node: Node) -> NodeChild {
@@ -765,6 +1022,20 @@ impl Nodes {
 
     fn update_node(&mut self, node_index: NodeIndex, new_node: Node) {
         self.items[node_index.index] = new_node;
+    }
+
+    fn delete_node(&mut self, node_index: NodeIndex) {
+        assert!(self.items[node_index.index].is_valid());
+        self.items[node_index.index] = Node::INVALID;
+        self.removed_nodes_count += 1;
+    }
+
+    pub fn live_nodes_count(&self) -> usize {
+        if self.items[0].is_valid() {
+            self.items.len() - self.removed_nodes_count
+        } else {
+            0
+        }
     }
 }
 
