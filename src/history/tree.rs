@@ -31,7 +31,7 @@ use history::{
 };
 
 // TODO remove over-provisioning and replace with full window sliding support
-const OVER_PROVISIONING_FACTOR: usize = 20;
+const OVER_PROVISIONING_FACTOR: usize = 10;
 const OVER_PROVISIONING_CONSTANT: usize = 100;
 
 pub struct TreeHistorySource {
@@ -42,8 +42,8 @@ pub struct TreeHistorySource {
 
 impl HistorySource for TreeHistorySource {
     fn new(max_window_size: usize, max_order: usize) -> TreeHistorySource {
-        let nodes = Nodes::new(max_window_size * OVER_PROVISIONING_FACTOR +
-            OVER_PROVISIONING_CONSTANT);
+        assert!(max_window_size > 0);
+        let nodes = Nodes::new(Nodes::NUM_ROOTS.max(max_window_size - 1));
         TreeHistorySource {
             tree: Tree::new(nodes, max_window_size, 0),
             active_contexts: ActiveContexts::new(max_order),
@@ -610,7 +610,7 @@ impl Tree {
         assert!(max_window_size > 0);
         Tree {
             nodes,
-            window: Vec::with_capacity(
+            window: Vec::with_capacity(OVER_PROVISIONING_CONSTANT +
                 max_window_size * OVER_PROVISIONING_FACTOR),
             window_start: 0,
             window_cursor: 0,
@@ -1000,7 +1000,8 @@ impl fmt::Display for Node {
 
 pub struct Nodes {
     items: Vec<Node>,
-    removed_nodes_count: usize, // no real removal yet
+    last_deleted_node_idx_opt: Option<NodeIndex>,
+    removed_nodes_count: usize,
 }
 
 impl Nodes {
@@ -1010,14 +1011,36 @@ impl Nodes {
         assert!(nodes_limit >= Nodes::NUM_ROOTS);
         let mut items = Vec::with_capacity(nodes_limit);
         (0..Nodes::NUM_ROOTS).for_each(|_| items.push(Node::INVALID));
-        Nodes { items, removed_nodes_count: 0 }
+        Nodes {
+            items,
+            last_deleted_node_idx_opt: None,
+            removed_nodes_count: 0,
+        }
     }
 
     fn add_node(&mut self, node: Node) -> NodeChild {
-        assert!(self.items.capacity() > self.items.len());
-        let node_child = NodeChild::from_node_index(self.items.len());
-        self.items.push(node);
-        node_child
+        if let Some(last_deleted_node_index) = self.last_deleted_node_idx_opt {
+            assert!(self.removed_nodes_count > 0);
+            self.removed_nodes_count -= 1;
+            let old_node_children = self[last_deleted_node_index].children;
+            assert!(!old_node_children[Direction::Left].is_valid());
+            let next_deleted_node_handle = old_node_children[Direction::Right];
+            if next_deleted_node_handle.is_valid() {
+                assert!(next_deleted_node_handle.is_node_index());
+                self.last_deleted_node_idx_opt =
+                    Some(next_deleted_node_handle.to_node_index());
+            } else {
+                self.last_deleted_node_idx_opt = None;
+            }
+            self.update_node(last_deleted_node_index, node);
+            NodeChild::from_node_index(last_deleted_node_index.index)
+        } else {
+            assert_eq!(self.removed_nodes_count, 0);
+            assert!(self.items.capacity() > self.items.len());
+            let node_child = NodeChild::from_node_index(self.items.len());
+            self.items.push(node);
+            node_child
+        }
     }
 
     fn update_node(&mut self, node_index: NodeIndex, new_node: Node) {
@@ -1026,7 +1049,13 @@ impl Nodes {
 
     fn delete_node(&mut self, node_index: NodeIndex) {
         assert!(self.items[node_index.index].is_valid());
-        self.items[node_index.index] = Node::INVALID;
+        let mut node = Node::INVALID;
+        node.children[Direction::Left] = NodeChild::INVALID;
+        node.children[Direction::Right] = self.last_deleted_node_idx_opt
+            .map(|node_index| NodeChild::from_node_index(node_index.index))
+            .unwrap_or(NodeChild::INVALID);
+        self.items[node_index.index] = node;
+        self.last_deleted_node_idx_opt = Some(node_index);
         self.removed_nodes_count += 1;
     }
 

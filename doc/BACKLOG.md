@@ -3,6 +3,7 @@
 - refactor
   - split big files into smaller ones (like splitting mod.rs)
   - take into account visibility and mutability
+  - remove Copy trait implementations where not strictly necessary
 - improve test infrastructure
   - Rust's release mode disables numeric overflow and underflow checking
     - don't disable them in tests
