@@ -21,6 +21,7 @@ use demixer::PRINT_DEBUG;
 use demixer::history::{
     HistorySource,
     CollectedContextStates,
+    ContextState,
 };
 use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
@@ -29,14 +30,15 @@ use demixer::history::tree::TreeHistorySource;
 pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
     let mut naive_source = NaiveHistorySource::new(input.len(), max_order);
     let mut fat_map_source = FatMapHistorySource::new(input.len(), max_order);
-    let mut tree_source = TreeHistorySource::new(input.len(), max_order);
+    let mut tree_source = TreeHistorySource::new_special(
+        input.len(), max_order, input.len() / 2);
 
     let mut naive_source_results = CollectedContextStates::new(max_order);
     let mut fat_map_source_results = CollectedContextStates::new(max_order);
     let mut tree_source_results = CollectedContextStates::new(max_order);
 
     for (index, byte) in input.iter().enumerate() {
-        tree_source.tree.check_integrity(max_order);
+        tree_source.check_integrity_before_next_byte();
         if run_naive {
             naive_source.start_new_byte();
         }
@@ -71,7 +73,15 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
                          index, bit_index, input);
             }
             assert_eq!(fat_map_source_results.items(),
-                       tree_source_results.items(),
+                       &tree_source_results.items().iter().map(|ctx_state| {
+                           ContextState {
+                               last_occurrence_index: tree_source.tree.window
+                                   .index_subtract(
+                                       ctx_state.last_occurrence_index,
+                                       tree_source.tree.window.start),
+                               bit_history: ctx_state.bit_history,
+                           }
+                       }).collect::<Vec<_>>()[..],
                        "index = {}, bit index = {}, input = {:?}",
                        index, bit_index, input);
 

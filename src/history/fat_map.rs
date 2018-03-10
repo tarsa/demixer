@@ -77,7 +77,7 @@ impl HistorySource for FatMapHistorySource {
         for order in 0..(self.max_order.min(self.input_cursor) + 1) {
             let map = &self.maps[(order * 8) + self.bit_index];
             let hash = self.compute_hash(order);
-            let vec_opt: Option<&Vec<_>> = map.get(&hash);
+            let vec_opt = map.get(&hash);
             match vec_opt.into_iter().
                 flat_map(|vec| vec.into_iter().find(|item| {
                     compare_for_equal_prefix(
@@ -98,7 +98,7 @@ impl HistorySource for FatMapHistorySource {
         for order in 0..(self.max_order.min(self.input_cursor) + 1) {
             let hash = self.compute_hash(order);
             let map = &mut self.maps[(order * 8) + self.bit_index];
-            let vec: &mut Vec<_> = map.entry(hash).or_insert(Vec::new());
+            let vec = map.entry(hash).or_insert(Vec::new());
             let input = &self.input;
             let byte_index = self.input_cursor - order;
             let bit_index = self.bit_index;

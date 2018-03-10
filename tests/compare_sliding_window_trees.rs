@@ -233,7 +233,7 @@ fn compare_for_repeated_pattern_borders() {
                 for &middle_length in [0, 1, 2, 3, 4, 7, 20, 40, 100].iter() {
                     let mut common_input = middle[..middle_length].to_vec();
                     common_input.extend_from_slice(&border[..suffix_length +
-                            prefix_1_length.min(prefix_2_length) + 1]);
+                        prefix_1_length.min(prefix_2_length) + 1]);
                     let max_window_size = middle_length + suffix_length;
                     for &max_order in [0, 1, 2, 3, 4, 7, 20, 40, 100]
                         .iter().take_while(|&&order| order < max_window_size) {
@@ -251,8 +251,8 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                      max_window_size: usize, max_order: usize) {
     assert!(max_order < max_window_size);
 
-    let offset_1 = prefix_1.len();
-    let offset_2 = prefix_2.len();
+    let offset_1 = prefix_1.len() % max_window_size;
+    let offset_2 = prefix_2.len() % max_window_size;
 
     if PRINT_DEBUG {
         println!("COMPARE SLIDING WINDOW TREES: max order = {}, \
@@ -271,8 +271,7 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
 
     if PRINT_DEBUG { println!("FILLING UP tree 1 with prefix data"); }
     for (index, byte) in prefix_1.iter().enumerate() {
-        source_1.active_contexts.check_integrity(&source_1.tree);
-        source_1.tree.check_integrity(max_order);
+        source_1.check_integrity_before_next_byte();
         source_1.start_new_byte();
         if PRINT_DEBUG {
             println!("prefix 1: started byte #{}, max order = {}, \
@@ -298,8 +297,7 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
 
     if PRINT_DEBUG { println!("FILLING UP tree 2 with prefix data"); }
     for (index, byte) in prefix_2.iter().enumerate() {
-        source_2.active_contexts.check_integrity(&source_2.tree);
-        source_2.tree.check_integrity(max_order);
+        source_2.check_integrity_before_next_byte();
         source_2.start_new_byte();
         if PRINT_DEBUG {
             println!("prefix 2: started byte #{}, max order = {}, \
@@ -344,16 +342,14 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                      prefix_1, &common[..index + 1]);
             source_1.tree.print();
         }
-        source_1.active_contexts.check_integrity(&source_1.tree);
-        source_1.tree.check_integrity(max_order);
+        source_1.check_integrity_before_next_byte();
         source_1.start_new_byte();
         if PRINT_DEBUG {
             println!("source 2, prefix = {:?}, common = {:?}",
                      prefix_2, &common[..index + 1]);
             source_2.tree.print();
         }
-        source_2.active_contexts.check_integrity(&source_2.tree);
-        source_2.tree.check_integrity(max_order);
+        source_2.check_integrity_before_next_byte();
         source_2.start_new_byte();
 
         for bit_index in (0..7 + 1).rev() {
@@ -400,16 +396,14 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                      prefix_1, &common[..index + 1]);
             source_1.tree.print();
         }
-        source_1.active_contexts.check_integrity(&source_1.tree);
-        source_1.tree.check_integrity(max_order);
+        source_1.check_integrity_before_next_byte();
         source_1.start_new_byte();
         if PRINT_DEBUG {
             println!("source 2, prefix = {:?}, common = {:?}",
                      prefix_2, &common[..index + 1]);
             source_2.tree.print();
         }
-        source_2.active_contexts.check_integrity(&source_2.tree);
-        source_2.tree.check_integrity(max_order);
+        source_2.check_integrity_before_next_byte();
         source_2.start_new_byte();
 
         for bit_index in (0..7 + 1).rev() {
@@ -427,20 +421,22 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
             }
 
             assert_eq!(
-                source_1.active_contexts.items().iter()
-                    .map(|ctx| ctx.prepare_for_test(offset_1))
-                    .collect::<Vec<_>>(),
-                source_2.active_contexts.items().iter()
-                    .map(|ctx| ctx.prepare_for_test(offset_2))
-                    .collect::<Vec<_>>()
+                source_1.active_contexts.items().iter().map(
+                    |ctx| ctx.prepare_for_test(offset_1, &source_1.tree.window)
+                ).collect::<Vec<_>>(),
+                source_2.active_contexts.items().iter().map(
+                    |ctx| ctx.prepare_for_test(offset_2, &source_2.tree.window)
+                ).collect::<Vec<_>>()
             );
 
             assert_eq!(
-                source_1_results.items().iter()
-                    .map(|ctx_state| ctx_state.last_occurrence_index - offset_1)
-                    .collect::<Vec<_>>(),
-                source_2_results.items().iter()
-                    .map(|ctx_state| ctx_state.last_occurrence_index - offset_2)
+                source_1_results.items().iter().map(
+                    |ctx_state| source_1.tree.window.index_subtract(
+                        ctx_state.last_occurrence_index, offset_1)
+                ).collect::<Vec<_>>(),
+                source_2_results.items().iter().map(
+                    |ctx_state| source_2.tree.window.index_subtract(
+                        ctx_state.last_occurrence_index, offset_2))
                     .collect::<Vec<_>>(),
                 "index = {}, bit index = {}, input = {:?}",
                 index, bit_index, &common[..index + 1]);
@@ -467,16 +463,14 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                      prefix_1, &common[..index + 1]);
             source_1.tree.print();
         }
-        source_1.active_contexts.check_integrity(&source_1.tree);
-        source_1.tree.check_integrity(max_order);
+        source_1.check_integrity_before_next_byte();
         source_1.tree.remove_leftmost_suffix(&mut source_1.active_contexts);
         if PRINT_DEBUG {
             println!("source 2, prefix = {:?}, common = {:?}",
                      prefix_2, &common[..index + 1]);
             source_2.tree.print();
         }
-        source_2.active_contexts.check_integrity(&source_2.tree);
-        source_2.tree.check_integrity(max_order);
+        source_2.check_integrity_before_next_byte();
         source_2.tree.remove_leftmost_suffix(&mut source_2.active_contexts);
 
         compare_shape(offset_1, &source_1.tree, offset_2, &source_2.tree);
@@ -484,8 +478,8 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
         if PRINT_DEBUG { println!(); }
     }
 
-    assert_eq!(source_1.tree.window_size, 0);
-    assert_eq!(source_2.tree.window_size, 0);
+    assert_eq!(source_1.tree.window.size, 0);
+    assert_eq!(source_2.tree.window.size, 0);
 }
 
 fn verify_live_nodes_count(tree: &Tree) {
@@ -538,8 +532,8 @@ fn compare_shape(offset_1: usize, tree_1: &Tree,
         let node_2 = tree_2.nodes()[node_index_2];
 
         assert_eq!(node_1.depth(), node_2.depth());
-        assert_eq!(node_1.text_start() - offset_1,
-                   node_2.text_start() - offset_2);
+        assert_eq!(tree_1.window.index_subtract(node_1.text_start(), offset_1),
+                   tree_2.window.index_subtract(node_2.text_start(), offset_2));
 
         let node_1_left_child = node_1.child(Direction::Left);
         let node_1_right_child = node_1.child(Direction::Right);

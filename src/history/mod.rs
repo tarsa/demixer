@@ -19,6 +19,7 @@ pub mod naive;
 pub mod fat_map;
 pub mod tree;
 
+// TODO convert to enum with variants: ForNode, ForEdge
 #[derive(Debug, Eq, PartialEq)]
 pub struct ContextState {
     // TODO wrap in WindowIndex
