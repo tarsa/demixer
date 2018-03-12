@@ -15,20 +15,24 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-extern crate core;
-
-use core::fmt;
-use std::ops;
-use std::collections::HashMap;
+pub mod context;
+pub mod direction;
+pub mod node;
+pub mod node_child;
+pub mod nodes;
+pub mod window;
 
 use ::PRINT_DEBUG;
-use history::{
-    HistorySource,
-    ContextState,
-    CollectedContextStates,
-    make_bit_run_history, updated_bit_history, get_bit, bytes_differ_on,
-    compare_for_equal_prefix,
+use ::history::{
+    CollectedContextStates, ContextState, HistorySource,
+    get_bit, make_bit_run_history, updated_bit_history,
 };
+use self::context::{ActiveContexts, Context};
+use self::direction::Direction;
+use self::node::Node;
+use self::node_child::{NodeChild, NodeIndex};
+use self::nodes::Nodes;
+use self::window::InputWindow;
 
 pub struct TreeHistorySource {
     pub tree: Tree,
@@ -90,328 +94,12 @@ impl HistorySource for TreeHistorySource {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Direction {
-    Left = 0,
-    Right = 1,
-}
-
-impl Direction {
-    fn fold<T, FL: FnOnce() -> T, FR: FnOnce() -> T>(
-        &self, on_left: FL, on_right: FR) -> T {
-        match *self {
-            Direction::Left => on_left(),
-            Direction::Right => on_right(),
-        }
-    }
-}
-
-impl ops::Index<Direction> for [NodeChild; 2] {
-    type Output = NodeChild;
-
-    fn index(&self, index: Direction) -> &NodeChild {
-        match index {
-            Direction::Left => &self[0],
-            Direction::Right => &self[1],
-        }
-    }
-}
-
-impl ops::IndexMut<Direction> for [NodeChild; 2] {
-    fn index_mut(&mut self, index: Direction) -> &mut NodeChild {
-        match index {
-            Direction::Left => &mut self[0],
-            Direction::Right => &mut self[1],
-        }
-    }
-}
-
-impl From<bool> for Direction {
-    fn from(bit: bool) -> Direction {
-        match bit {
-            false => Direction::Left,
-            true => Direction::Right,
-        }
-    }
-}
-
-impl ops::Not for Direction {
-    type Output = Direction;
-
-    fn not(self) -> Direction {
-        match self {
-            Direction::Left => Direction::Right,
-            Direction::Right => Direction::Left,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum TreeState {
     /** Every inner node has two leaves */
     Proper,
     /** Has only invalid root node, happens when all symbols are identical */
     Degenerate,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Context {
-    suffix_index: WindowIndex,
-    node_index: NodeIndex,
-    incoming_edge_visits_count: i32,
-    in_leaf: bool,
-    direction_from_parent: Option<Direction>,
-}
-
-impl Context {
-    fn descend(&mut self, tree: &mut Tree, order: usize, bit_index: usize) {
-        assert!(!self.in_leaf);
-        let direction: Direction =
-            get_bit(tree.window.buffer[tree.window.cursor], bit_index).into();
-        self.direction_from_parent = Some(direction);
-        let node_index = self.node_index;
-        self.incoming_edge_visits_count = {
-            let node = &tree.nodes()[node_index];
-            if direction == Direction::Left {
-                node.left_count()
-            } else {
-                node.right_count()
-            }
-        } as i32;
-        tree.nodes_mut()[node_index].increment_edge_counters(direction);
-        let child = tree.nodes()[node_index].child(direction);
-        if child.is_window_index() {
-            self.in_leaf = true;
-            self.suffix_index = child.to_window_index();
-            tree.nodes_mut()[node_index].children[direction] = {
-                let window_index =
-                    tree.window.index_subtract(tree.window.cursor, order);
-                NodeChild::from_window_index(window_index)
-            };
-        } else {
-            self.node_index = child.to_node_index();
-            self.suffix_index = WindowIndex::new(
-                tree.nodes()[self.node_index].text_start as i32);
-            tree.nodes_mut()[self.node_index].text_start =
-                tree.window.index_subtract(tree.window.cursor, order) as u32;
-        }
-        if PRINT_DEBUG {
-            println!("DESCEND, order = {}, after = {}", order, self);
-        }
-    }
-
-    pub fn prepare_for_test(&self, offset: usize,
-                            window: &InputWindow) -> Context {
-        Context {
-            suffix_index: WindowIndex {
-                index: window.index_subtract(self.suffix_index.index, offset)
-            },
-            node_index: NodeIndex::new(<i32>::max_value()),
-            incoming_edge_visits_count: 0,
-            ..self.clone()
-        }
-    }
-}
-
-impl fmt::Display for Context {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "sfx:{},node:{},incnt:{},inleaf:{},dir:{}",
-               self.suffix_index.index,
-               self.node_index.index,
-               self.incoming_edge_visits_count,
-               self.in_leaf,
-               self.direction_from_parent.map(|dir|
-                   dir.fold(|| "left", || "right")).unwrap_or("none"))
-    }
-}
-
-#[derive(Debug)]
-pub struct ActiveContexts {
-    items: Vec<Context>,
-}
-
-impl ActiveContexts {
-    pub fn new(max_order: usize) -> ActiveContexts {
-        ActiveContexts {
-            items: Vec::with_capacity(max_order + 1),
-        }
-    }
-
-    pub fn shift(&mut self, tree: &mut Tree) {
-        if tree.tree_state == TreeState::Degenerate {
-            assert_eq!(self.count(), 0);
-            return;
-        }
-        if self.max_order() + 1 == self.items.len() {
-            self.items.pop().unwrap();
-        }
-        let root_index = tree.get_root_node_index();
-        tree.nodes[root_index].text_start = tree.window.cursor as u32;
-        let root = &tree.nodes[root_index];
-        let incoming_edge_visits_count =
-            63.min(root.left_count() + root.right_count()) as i32;
-        let suffix_index = tree.window.index_decrement(tree.window.cursor);
-        self.items.insert(0, Context {
-            suffix_index: WindowIndex::new(suffix_index as i32),
-            node_index: root_index,
-            in_leaf: false,
-            incoming_edge_visits_count,
-            direction_from_parent: None,
-        });
-    }
-
-    fn max_order(&self) -> usize {
-        self.items.capacity() - 1
-    }
-
-    fn count(&self) -> usize {
-        self.items.len()
-    }
-
-    fn keep_only(&mut self, count: usize) {
-        self.items.split_off(count);
-    }
-
-    pub fn items(&self) -> &[Context] {
-        &self.items
-    }
-
-    pub fn check_integrity_before_next_byte(&self, tree: &Tree) {
-        if tree.tree_state == TreeState::Proper {
-            let mut contexts_suffixes_map = HashMap::new();
-            for ctx in self.items.iter() {
-                contexts_suffixes_map.insert(ctx.node_index.index,
-                                             ctx.suffix_index.index);
-            }
-            let mut stack = Vec::new();
-            stack.push(tree.get_root_node_index());
-            while let Some(node_index) = stack.pop() {
-                let node = tree.nodes[node_index];
-                let node_text_start = *contexts_suffixes_map
-                    .get(&node_index.index).unwrap_or(&node.text_start());
-                let full_byte_length = (node.depth / 8) as usize;
-                let bit_index = 7 - (node.depth % 8) as usize;
-                let children = tree.nodes.items[node_index.index].children;
-                for child in children.iter() {
-                    assert!(child.is_valid());
-                    if child.is_node_index() {
-                        let child_node = tree.nodes[child.to_node_index()];
-                        assert!(tree.window.compare_for_equal_prefix(
-                            node_text_start, child_node.text_start(),
-                            bit_index, full_byte_length));
-                        stack.push(child.to_node_index());
-                    } else {
-                        assert!(tree.window.compare_for_equal_prefix(
-                            node_text_start, child.to_window_index().index,
-                            bit_index, full_byte_length));
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl ops::Index<usize> for ActiveContexts {
-    type Output = Context;
-
-    fn index(&self, index: usize) -> &Context {
-        &self.items[index]
-    }
-}
-
-impl ops::IndexMut<usize> for ActiveContexts {
-    fn index_mut(&mut self, index: usize) -> &mut Context {
-        &mut self.items[index]
-    }
-}
-
-impl fmt::Display for ActiveContexts {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("active contexts: [")?;
-        if let Some(head) = self.items.first() {
-            head.fmt(f)?;
-        }
-        for item in self.items.iter().skip(1) {
-            write!(f, "  {}", item)?;
-        }
-        f.write_str("]")
-    }
-}
-
-pub struct InputWindow {
-    buffer: Vec<u8>,
-    pub start: usize,
-    pub cursor: usize,
-    pub size: usize,
-    max_size: usize,
-}
-
-impl InputWindow {
-    fn index_add(&self, index: usize, to_add: usize) -> usize {
-        let mut result = index + to_add;
-        if result >= self.max_size {
-            assert_eq!(self.buffer.len(), self.max_size);
-            result -= self.max_size;
-        }
-        result
-    }
-
-    fn index_increment(&self, index: usize) -> usize {
-        self.index_add(index, 1)
-    }
-
-    pub fn index_subtract(&self, index: usize, to_subtract: usize) -> usize {
-        if index >= to_subtract {
-            index - to_subtract
-        } else {
-            assert_eq!(self.buffer.len(), self.max_size);
-            index + self.max_size - to_subtract
-        }
-    }
-
-    fn index_decrement(&self, index: usize) -> usize {
-        self.index_subtract(index, 1)
-    }
-
-    fn index_is_smaller(&self, idx_1: usize, idx_2: usize) -> bool {
-        let fst = if idx_1 < self.start { idx_1 + self.max_size } else { idx_1 };
-        let snd = if idx_2 < self.start { idx_2 + self.max_size } else { idx_2 };
-        fst < snd
-    }
-
-    fn index_is_smaller_or_equal(&self, idx_1: usize, idx_2: usize) -> bool {
-        !self.index_is_smaller(idx_2, idx_1)
-    }
-
-    fn compare_for_equal_prefix(&self, starting_index_first: usize,
-                                starting_index_second: usize, bit_index: usize,
-                                full_byte_length: usize) -> bool {
-        if starting_index_first.max(starting_index_second) + full_byte_length
-            < self.max_size {
-            compare_for_equal_prefix(&self.buffer, starting_index_first,
-                                     starting_index_second, bit_index,
-                                     full_byte_length)
-        } else {
-            let mut index_first = starting_index_first;
-            let mut index_second = starting_index_second;
-            let mut equal = true;
-            for _ in 0..full_byte_length {
-                equal &= self.buffer[index_first] == self.buffer[index_second];
-                if !equal { break; }
-                index_first = self.index_increment(index_first);
-                index_second = self.index_increment(index_second);
-            }
-            equal &= compare_for_equal_prefix(&self.buffer, index_first,
-                                              index_second, bit_index, 0);
-            equal
-        }
-    }
-
-    fn bytes_differ_on(&self, first_byte_index: usize, second_byte_index: usize,
-                       bit_index: usize) -> bool {
-        bytes_differ_on(first_byte_index, second_byte_index, bit_index,
-                        &self.buffer)
-    }
 }
 
 pub struct Tree {
@@ -508,7 +196,7 @@ impl Tree {
                 assert!(leaf_sibling.is_node_index());
                 let leaf_sibling_node_index = leaf_sibling.to_node_index();
                 let mut leaf_sibling_node =
-                    self.nodes[leaf_sibling_node_index];
+                    self.nodes[leaf_sibling_node_index].clone();
                 leaf_sibling_node.text_start =
                     self.nodes[root_index].text_start;
                 self.nodes.update_node(root_index, leaf_sibling_node);
@@ -563,7 +251,7 @@ impl Tree {
                     }
                 }
                 let mut leaf_sibling_node =
-                    self.nodes[leaf_sibling_node_index];
+                    self.nodes[leaf_sibling_node_index].clone();
                 leaf_sibling_node.text_start =
                     self.nodes[node_index].text_start;
                 self.nodes.update_node(leaf_sibling_node_index,
@@ -699,7 +387,7 @@ impl Tree {
     }
 
     fn print_node(&self, node_index: NodeIndex, depth: usize) {
-        let node = self.nodes[node_index];
+        let node = &self.nodes[node_index];
         assert!(node.is_valid());
         println!("{}{} = {}", "   ".repeat(depth), node, node_index.index);
         if node.child(Direction::Left).is_node_index() {
@@ -756,7 +444,7 @@ impl Tree {
                 assert_ne!(self.window.cursor, self.window.start);
                 for (order, context) in
                     active_contexts.items.iter().enumerate() {
-                    let node: Node = self.nodes[context.node_index];
+                    let node = &self.nodes[context.node_index];
                     let last_occurrence_index = context.suffix_index.index;
                     assert!(self.window.index_is_smaller(
                         last_occurrence_index, self.window.index_subtract(
@@ -873,23 +561,22 @@ impl Tree {
             if PRINT_DEBUG {
                 print!("SPLIT: internal edge, order = {}", context_order);
             }
-            let mut new_node = self.nodes[node_index];
+            let mut new_node = self.nodes[node_index].clone();
             if PRINT_DEBUG { print!(", node = {}", new_node); }
             let mut node = self.setup_split_edge(
                 context, context_order, bit_index, new_node.text_start());
             new_node.text_start = context.suffix_index.index as u32;
             node.children[direction] = NodeChild::from_window_index(
                 self.window.index_subtract(self.window.cursor, context_order));
+            if PRINT_DEBUG { print!(", new child = {}", new_node) }
             node.children[!direction] = self.nodes.add_node(new_node);
-            if PRINT_DEBUG {
-                print!(", new parent = {}, new child = {}", node, new_node);
-            }
+            if PRINT_DEBUG { print!(", new parent = {}", node); }
             self.nodes.update_node(node_index, node);
         } else {
             if PRINT_DEBUG {
                 print!("SPLIT: leaf edge, order = {}", context_order);
             }
-            let mut node = self.nodes[node_index];
+            let mut node = self.nodes[node_index].clone();
             if PRINT_DEBUG { print!(", node = {}", node); }
             let mut new_node = self.setup_split_edge(
                 context, context_order, bit_index,
@@ -899,11 +586,10 @@ impl Tree {
                 self.window.index_subtract(self.window.cursor, context_order));
             new_node.children[!direction] =
                 NodeChild::from_window_index(context.suffix_index.index);
+            if PRINT_DEBUG { print!(", new child = {}", new_node) }
             node.children[context.direction_from_parent.unwrap()] =
                 self.nodes.add_node(new_node);
-            if PRINT_DEBUG {
-                print!(", new parent = {}, new child = {}", node, new_node);
-            }
+            if PRINT_DEBUG { print!(", new parent = {}", node); }
             self.nodes.update_node(node_index, node);
         }
         if PRINT_DEBUG { println!(", context = {}", context); }
@@ -967,251 +653,5 @@ impl Tree {
             }
         }
         assert_eq!(last_node_index_opt, None);
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NodeChild {
-    index: i32
-}
-
-impl NodeChild {
-    // root node can't be a child
-    const INVALID: NodeChild = NodeChild { index: !0 };
-
-    fn from_window_index(window_index: usize) -> NodeChild {
-        assert!(window_index <= 0x7fff_ffff);
-        NodeChild { index: window_index as i32 }
-    }
-
-    fn from_node_index(node_index: usize) -> NodeChild {
-        assert!(node_index >= Nodes::NUM_ROOTS && node_index <= 0x7fff_ffff);
-        NodeChild { index: !(node_index as i32) }
-    }
-
-    fn is_valid(&self) -> bool {
-        self.index >= 0 || (!self.index) as usize >= Nodes::NUM_ROOTS
-    }
-
-    pub fn is_window_index(&self) -> bool {
-        self.index >= 0
-    }
-
-    pub fn is_node_index(&self) -> bool {
-        self.index < 0
-    }
-
-    fn to_window_index(&self) -> WindowIndex {
-        WindowIndex::new(self.index)
-    }
-
-    pub fn to_node_index(&self) -> NodeIndex {
-        NodeIndex::new(!self.index)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NodeIndex {
-    index: usize
-}
-
-impl NodeIndex {
-    fn new(index: i32) -> NodeIndex {
-        assert!(index >= 0);
-        NodeIndex { index: index as usize }
-    }
-
-    fn is_root(&self) -> bool {
-        self.index < Nodes::NUM_ROOTS
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct WindowIndex {
-    index: usize
-}
-
-impl WindowIndex {
-    fn new(index: i32) -> WindowIndex {
-        assert!(index >= 0);
-        WindowIndex { index: index as usize }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct Node {
-    children: [NodeChild; 2],
-    // counter: SimpleCounter,
-    text_start: u32,
-    history_state: u16,
-    depth: u16,
-    left_count: u16,
-    right_count: u16,
-}
-
-impl Node {
-    const INVALID: Node = Node {
-        children: [NodeChild::INVALID, NodeChild::INVALID],
-        text_start: 0,
-        history_state: 0,
-        depth: 0,
-        left_count: 0,
-        right_count: 0,
-    };
-
-    fn new(text_start: usize, depth: usize,
-           left_count: usize, right_count: usize, history_state: u32,
-           children: [NodeChild; 2]) -> Node {
-        assert!((text_start as u64) < 1u64 << 31);
-        assert!((depth as u64) < 1u64 << 16);
-        assert!((left_count as u64) < 1u64 << 16);
-        assert!((right_count as u64) < 1u64 << 16);
-        assert!((history_state as u64) < 1u64 << 16);
-        Node {
-            children,
-            text_start: text_start as u32,
-            history_state: history_state as u16,
-            depth: depth as u16,
-            left_count: left_count as u16,
-            right_count: right_count as u16,
-        }
-    }
-
-    fn is_valid(&self) -> bool {
-        self.children[0] != NodeChild::INVALID &&
-            self.children[1] != NodeChild::INVALID
-    }
-
-    pub fn text_start(&self) -> usize {
-        self.text_start as usize
-    }
-
-    pub fn depth(&self) -> usize {
-        self.depth as usize
-    }
-
-    fn left_count(&self) -> usize {
-        self.left_count as usize
-    }
-
-    fn right_count(&self) -> usize {
-        self.right_count as usize
-    }
-
-    fn history_state(&self) -> u32 {
-        self.history_state as u32
-    }
-
-    pub fn child(&self, direction: Direction) -> NodeChild {
-        self.children[direction]
-    }
-
-    fn increment_edge_counters(&mut self, direction: Direction) {
-        match direction {
-            Direction::Left =>
-                self.left_count = 63.min(self.left_count + 1),
-            Direction::Right =>
-                self.right_count = 63.min(self.right_count + 1),
-        }
-        self.history_state = updated_bit_history(
-            self.history_state(), direction.fold(|| false, || true)) as u16;
-    }
-}
-
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}'{}'{:b}'l({})r({})",
-               self.text_start(), self.depth(), self.history_state(),
-               self.left_count(), self.right_count())
-    }
-}
-
-pub struct Nodes {
-    items: Vec<Node>,
-    last_deleted_node_idx_opt: Option<NodeIndex>,
-    removed_nodes_count: usize,
-}
-
-impl Nodes {
-    const NUM_ROOTS: usize = 1;
-
-    pub fn new(nodes_limit: usize) -> Nodes {
-        assert!(nodes_limit >= Nodes::NUM_ROOTS);
-        let mut items = Vec::with_capacity(nodes_limit);
-        (0..Nodes::NUM_ROOTS).for_each(|_| items.push(Node::INVALID));
-        Nodes {
-            items,
-            last_deleted_node_idx_opt: None,
-            removed_nodes_count: 0,
-        }
-    }
-
-    fn add_node(&mut self, node: Node) -> NodeChild {
-        if let Some(last_deleted_node_index) = self.last_deleted_node_idx_opt {
-            assert!(self.removed_nodes_count > 0);
-            self.removed_nodes_count -= 1;
-            let old_node_children = self[last_deleted_node_index].children;
-            assert!(!old_node_children[Direction::Left].is_valid());
-            let next_deleted_node_handle = old_node_children[Direction::Right];
-            if next_deleted_node_handle.is_valid() {
-                assert!(next_deleted_node_handle.is_node_index());
-                self.last_deleted_node_idx_opt =
-                    Some(next_deleted_node_handle.to_node_index());
-            } else {
-                self.last_deleted_node_idx_opt = None;
-            }
-            self.update_node(last_deleted_node_index, node);
-            NodeChild::from_node_index(last_deleted_node_index.index)
-        } else {
-            assert_eq!(self.removed_nodes_count, 0);
-            assert!(self.items.capacity() > self.items.len());
-            let node_child = NodeChild::from_node_index(self.items.len());
-            self.items.push(node);
-            node_child
-        }
-    }
-
-    fn update_node(&mut self, node_index: NodeIndex, new_node: Node) {
-        self.items[node_index.index] = new_node;
-    }
-
-    fn delete_node(&mut self, node_index: NodeIndex) {
-        assert!(self.items[node_index.index].is_valid());
-        let mut node = Node::INVALID;
-        node.children[Direction::Left] = NodeChild::INVALID;
-        node.children[Direction::Right] = self.last_deleted_node_idx_opt
-            .map(|node_index| NodeChild::from_node_index(node_index.index))
-            .unwrap_or(NodeChild::INVALID);
-        self.items[node_index.index] = node;
-        self.last_deleted_node_idx_opt = Some(node_index);
-        self.removed_nodes_count += 1;
-    }
-
-    pub fn live_nodes_count(&self) -> usize {
-        if self.items[0].is_valid() {
-            self.items.len() - self.removed_nodes_count
-        } else {
-            0
-        }
-    }
-}
-
-impl ops::Index<NodeIndex> for Nodes {
-    type Output = Node;
-
-    fn index(&self, node_index: NodeIndex) -> &Node {
-        let index = node_index.index;
-        let node = &self.items[index];
-        assert!(index >= Nodes::NUM_ROOTS || node.is_valid());
-        node
-    }
-}
-
-impl ops::IndexMut<NodeIndex> for Nodes {
-    fn index_mut(&mut self, node_index: NodeIndex) -> &mut Node {
-        let index = node_index.index;
-        let node = &mut self.items[index];
-        assert!(index >= Nodes::NUM_ROOTS || node.is_valid());
-        node
     }
 }

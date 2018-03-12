@@ -1,10 +1,16 @@
 [package]
 name = "demixer"
-version = "0.5.2"
+version = "0.5.3"
 authors = ["Piotr Tarsa"]
 
 [features]
 default = []
 long_tests = []
+
+[profile.release]
+lto = true
+
+[profile.test]
+opt-level = 1
 
 [dependencies]

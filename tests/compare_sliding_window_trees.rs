@@ -18,16 +18,9 @@
 extern crate demixer;
 
 use demixer::PRINT_DEBUG;
-use demixer::history::{
-    CollectedContextStates,
-    HistorySource,
-};
-use demixer::history::tree::{
-    Direction,
-    Tree,
-    TreeHistorySource,
-    TreeState,
-};
+use demixer::history::{CollectedContextStates, HistorySource};
+use demixer::history::tree::{Tree, TreeHistorySource, TreeState};
+use demixer::history::tree::direction::Direction;
 
 #[test]
 fn compare_for_repeated_byte_input() {
@@ -492,7 +485,7 @@ fn verify_live_nodes_count(tree: &Tree) {
 
     while let Some(node_index) = indices_stack.pop() {
         visited_nodes += 1;
-        let node = tree.nodes()[node_index];
+        let node = &tree.nodes()[node_index];
 
         let left_child = node.child(Direction::Left);
         if left_child.is_node_index() {
@@ -528,8 +521,8 @@ fn compare_shape(offset_1: usize, tree_1: &Tree,
         let node_index_2 = stack_2.pop().unwrap();
         visited_nodes_1 += 1;
         visited_nodes_2 += 1;
-        let node_1 = tree_1.nodes()[node_index_1];
-        let node_2 = tree_2.nodes()[node_index_2];
+        let node_1 = &tree_1.nodes()[node_index_1];
+        let node_2 = &tree_2.nodes()[node_index_2];
 
         assert_eq!(node_1.depth(), node_2.depth());
         assert_eq!(tree_1.window.index_subtract(node_1.text_start(), offset_1),
