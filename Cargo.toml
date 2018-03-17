@@ -1,6 +1,6 @@
 [package]
 name = "demixer"
-version = "0.5.4"
+version = "0.5.5"
 authors = ["Piotr Tarsa"]
 
 [features]

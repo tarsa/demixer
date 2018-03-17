@@ -20,13 +20,13 @@ use core::hash::Hasher;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 
-use history::{
+use super::{
     HistorySource,
     ContextState,
     CollectedContextStates,
     updated_bit_history,
 };
-use history::tree::window::{InputWindow, WindowIndex};
+use super::window::{InputWindow, WindowIndex};
 
 #[derive(Clone)]
 struct LocalContextState {

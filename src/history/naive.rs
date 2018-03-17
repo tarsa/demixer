@@ -15,13 +15,13 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use history::{
+use super::{
     HistorySource,
     ContextState,
     CollectedContextStates,
     updated_bit_history,
 };
-use history::tree::window::{InputWindow, WindowIndex};
+use super::window::{InputWindow, WindowIndex};
 
 pub struct NaiveHistorySource {
     input: InputWindow,

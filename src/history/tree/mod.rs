@@ -20,19 +20,18 @@ pub mod direction;
 pub mod node;
 pub mod node_child;
 pub mod nodes;
-pub mod window;
 
-use ::PRINT_DEBUG;
-use ::history::{
+use PRINT_DEBUG;
+use super::{
     CollectedContextStates, ContextState, HistorySource,
     make_bit_run_history, updated_bit_history,
 };
+use super::window::{InputWindow, WindowIndex};
 use self::context::{ActiveContexts, Context};
 use self::direction::Direction;
 use self::node::Node;
 use self::node_child::{NodeChild, NodeIndex};
 use self::nodes::Nodes;
-use self::window::{InputWindow, WindowIndex};
 
 pub struct TreeHistorySource {
     pub tree: Tree,

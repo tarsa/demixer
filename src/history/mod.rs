@@ -18,8 +18,9 @@
 pub mod naive;
 pub mod fat_map;
 pub mod tree;
+pub mod window;
 
-use self::tree::window::WindowIndex;
+use self::window::WindowIndex;
 
 // TODO convert to enum with variants: ForNode, ForEdge
 #[derive(Debug, Eq, PartialEq)]

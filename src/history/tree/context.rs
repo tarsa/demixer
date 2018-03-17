@@ -19,11 +19,11 @@ use core::fmt;
 use std::collections::HashMap;
 use std::ops;
 
-use ::PRINT_DEBUG;
-use ::history::tree::{Tree, TreeState};
-use ::history::tree::direction::Direction;
-use ::history::tree::node_child::NodeIndex;
-use ::history::tree::window::{InputWindow, WindowIndex};
+use PRINT_DEBUG;
+use history::window::{InputWindow, WindowIndex};
+use super::{Tree, TreeState};
+use super::direction::Direction;
+use super::node_child::NodeIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Context {

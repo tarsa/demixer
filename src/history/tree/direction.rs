@@ -17,7 +17,7 @@
  */
 use std::ops;
 
-use ::history::tree::node_child::NodeChild;
+use super::node_child::NodeChild;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Direction {

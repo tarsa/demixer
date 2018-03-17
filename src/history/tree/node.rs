@@ -17,10 +17,10 @@
  */
 use core::fmt;
 
-use ::history::updated_bit_history;
-use ::history::tree::direction::Direction;
-use ::history::tree::node_child::NodeChild;
-use ::history::tree::window::WindowIndex;
+use history::updated_bit_history;
+use history::window::WindowIndex;
+use super::direction::Direction;
+use super::node_child::NodeChild;
 
 #[derive(Clone)]
 pub struct Node {

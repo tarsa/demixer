@@ -15,8 +15,8 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use ::history::tree::nodes::Nodes;
-use ::history::tree::window::WindowIndex;
+use history::window::WindowIndex;
+use super::nodes::Nodes;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NodeChild {

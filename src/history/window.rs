@@ -42,7 +42,6 @@ impl fmt::Display for WindowIndex {
     }
 }
 
-// TODO move to demixer::history
 pub struct InputWindow {
     buffer: Vec<u8>,
     start: WindowIndex,

@@ -25,7 +25,7 @@ use demixer::history::{CollectedContextStates, HistorySource};
 use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
 use demixer::history::tree::TreeHistorySource;
-use demixer::history::tree::window::get_bit;
+use demixer::history::window::get_bit;
 
 fn main() {
     print_banner();

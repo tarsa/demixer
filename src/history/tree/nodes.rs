@@ -17,9 +17,9 @@
  */
 use std::ops;
 
-use ::history::tree::direction::Direction;
-use ::history::tree::node::Node;
-use ::history::tree::node_child::{NodeChild, NodeIndex};
+use super::direction::Direction;
+use super::node::Node;
+use super::node_child::{NodeChild, NodeIndex};
 
 pub struct Nodes {
     pub items: Vec<Node>,
