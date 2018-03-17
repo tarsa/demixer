@@ -30,8 +30,8 @@ use super::window::{InputWindow, WindowIndex};
 use self::context::{ActiveContexts, Context};
 use self::direction::Direction;
 use self::node::Node;
-use self::node_child::{NodeChild, NodeIndex};
-use self::nodes::Nodes;
+use self::node_child::NodeChild;
+use self::nodes::{NodeIndex, Nodes};
 
 pub struct TreeHistorySource {
     pub tree: Tree,
@@ -99,11 +99,15 @@ pub enum TreeState {
 pub struct Tree {
     nodes: Nodes,
     pub window: InputWindow,
-    pub tree_state: TreeState,
-    root_index: i32,
+    tree_state: TreeState,
+    root_index: usize,
 }
 
 impl Tree {
+    pub fn tree_state(&self) -> TreeState {
+        self.tree_state
+    }
+
     fn start_new_byte(&mut self, active_contexts: &mut ActiveContexts) {
         if self.window.size() == self.window.max_size() {
             self.remove_leftmost_suffix(active_contexts);
@@ -148,7 +152,7 @@ impl Tree {
         let leaf_window_index = self.nodes[node_index].child(leaf_direction)
             .to_window_index();
         let node_found_in_active_contexts = active_contexts.items.iter()
-            .find(|ctx| ctx.node_index.index == node_index.index).is_some();
+            .find(|ctx| ctx.node_index == node_index).is_some();
         if PRINT_DEBUG { print!("DELETING: "); }
         if leaf_window_index != self.window.start() {
             if PRINT_DEBUG {
@@ -198,7 +202,7 @@ impl Tree {
         } else if node_found_in_active_contexts {
             assert!(!node_index.is_root());
             let leaf_found_in_active_contexts = active_contexts.items.iter()
-                .find(|ctx| ctx.node_index.index == node_index.index &&
+                .find(|ctx| ctx.node_index == node_index &&
                     ctx.direction_from_parent == Some(leaf_direction) &&
                     ctx.in_leaf == true).is_some();
             assert!(!leaf_found_in_active_contexts,
@@ -288,8 +292,8 @@ impl Tree {
 //                    if PRINT_DEBUG { println!("CHECK early exit"); }
                     break;
                 }
-                let full_byte_length = (node.depth / 8) as usize;
-                let bit_index = 7 - (node.depth % 8) as usize;
+                let full_byte_length = node.depth() / 8;
+                let bit_index = 7 - (node.depth() % 8);
                 assert!(
                     self.window.compare_for_equal_prefix(
                         suffix_start, node.text_start(),
@@ -297,7 +301,7 @@ impl Tree {
                     "suffix start = {}, depth bytes = {}, bit index = {}, \
                     window pos = {}, node index = {}",
                     suffix_start, full_byte_length, bit_index,
-                    self.window.cursor(), node_index.index);
+                    self.window.cursor(), node_index);
                 if self.window.bytes_differ_on(
                     self.window.index_add(suffix_start, full_byte_length),
                     self.window.index_add(node.text_start(), full_byte_length),
@@ -335,7 +339,7 @@ impl Tree {
             let mut stack = Vec::new();
             stack.push(self.get_root_node_index());
             while let Some(node_index) = stack.pop() {
-                let children = self.nodes.items[node_index.index].children;
+                let children = self.nodes[node_index].children;
                 for child in children.iter() {
                     assert!(child.is_valid());
                     if child.is_node_index() {
@@ -364,7 +368,7 @@ impl Tree {
     fn print_node(&self, node_index: NodeIndex, depth: usize) {
         let node = &self.nodes[node_index];
         assert!(node.is_valid());
-        println!("{}{} = {}", "   ".repeat(depth), node, node_index.index);
+        println!("{}{} = {}", "   ".repeat(depth), node, node_index);
         if node.child(Direction::Left).is_node_index() {
             self.print_node(node.child(Direction::Left).to_node_index(),
                             depth + 1);
@@ -382,7 +386,7 @@ impl Tree {
     }
 
     pub fn new(nodes: Nodes, max_window_size: usize, initial_shift: usize,
-               root_index: i32) -> Tree {
+               root_index: usize) -> Tree {
         Tree {
             nodes,
             window: InputWindow::new(max_window_size, initial_shift),

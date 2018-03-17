@@ -23,7 +23,7 @@ use PRINT_DEBUG;
 use history::window::{InputWindow, WindowIndex};
 use super::{Tree, TreeState};
 use super::direction::Direction;
-use super::node_child::NodeIndex;
+use super::nodes::NodeIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Context {
@@ -72,7 +72,7 @@ impl Context {
                             window: &InputWindow) -> Context {
         Context {
             suffix_index: window.index_subtract(self.suffix_index, offset),
-            node_index: NodeIndex::new(<i32>::max_value()),
+            node_index: NodeIndex::new(<usize>::max_value()),
             incoming_edge_visits_count: 0,
             ..self.clone()
         }
@@ -83,7 +83,7 @@ impl fmt::Display for Context {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "sfx:{},node:{},incnt:{},inleaf:{},dir:{}",
                self.suffix_index,
-               self.node_index.index,
+               self.node_index,
                self.incoming_edge_visits_count,
                self.in_leaf,
                self.direction_from_parent.map(|dir|
@@ -104,7 +104,7 @@ impl ActiveContexts {
     }
 
     pub fn shift(&mut self, tree: &mut Tree) {
-        if tree.tree_state == TreeState::Degenerate {
+        if tree.tree_state() == TreeState::Degenerate {
             assert_eq!(self.count(), 0);
             return;
         }
@@ -143,10 +143,10 @@ impl ActiveContexts {
     }
 
     pub fn check_integrity_on_next_byte(&self, tree: &Tree) {
-        if tree.tree_state == TreeState::Proper {
+        if tree.tree_state() == TreeState::Proper {
             let mut contexts_suffixes_map = HashMap::new();
             for ctx in self.items.iter() {
-                contexts_suffixes_map.insert(ctx.node_index.index,
+                contexts_suffixes_map.insert(ctx.node_index.raw(),
                                              ctx.suffix_index);
             }
             let mut stack = Vec::new();
@@ -154,10 +154,10 @@ impl ActiveContexts {
             while let Some(node_index) = stack.pop() {
                 let node = &tree.nodes[node_index];
                 let node_text_start = *contexts_suffixes_map
-                    .get(&node_index.index).unwrap_or(&node.text_start());
-                let full_byte_length = (node.depth / 8) as usize;
-                let bit_index = 7 - (node.depth % 8) as usize;
-                let children = tree.nodes.items[node_index.index].children;
+                    .get(&node_index.raw()).unwrap_or(&node.text_start());
+                let full_byte_length = node.depth() / 8;
+                let bit_index = 7 - (node.depth() % 8);
+                let children = tree.nodes[node_index].children;
                 for child in children.iter() {
                     assert!(child.is_valid());
                     if child.is_node_index() {

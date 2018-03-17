@@ -1,15 +1,14 @@
 # Backlog
 
-- refactor
-  - split big files into smaller ones (like splitting mod.rs)
-  - take into account visibility and mutability
-  - remove Copy trait implementations where not strictly necessary
+- add missing unit tests
+  - InputWindow is missing ones
 - improve test infrastructure
   - Rust's release mode disables numeric overflow and underflow checking
     - don't disable them in tests
   - split test into multiple categories to save time on developing isolated
     features
 - add stationary counters to tree nodes (i.e. to the explicit, branching ones)
+- split history module into history::source and history::state modules
 - add support for different sizes of nodes pool and input window in tree based
   history source
   - keep in mind that next bit can potentially result in all active contexts

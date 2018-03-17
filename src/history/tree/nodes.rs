@@ -15,14 +15,39 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use std::ops;
+use std::{fmt, ops};
 
 use super::direction::Direction;
 use super::node::Node;
-use super::node_child::{NodeChild, NodeIndex};
+use super::node_child::NodeChild;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NodeIndex {
+    value: usize
+}
+
+impl NodeIndex {
+    pub fn new(value: usize) -> NodeIndex {
+        NodeIndex { value }
+    }
+
+    pub fn raw(&self) -> usize {
+        self.value
+    }
+
+    pub fn is_root(&self) -> bool {
+        self.value < Nodes::NUM_ROOTS
+    }
+}
+
+impl fmt::Display for NodeIndex {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
 
 pub struct Nodes {
-    pub items: Vec<Node>,
+    items: Vec<Node>,
     last_deleted_node_idx_opt: Option<NodeIndex>,
     removed_nodes_count: usize,
 }
@@ -56,28 +81,26 @@ impl Nodes {
                 self.last_deleted_node_idx_opt = None;
             }
             self.update_node(last_deleted_node_index, node);
-            NodeChild::from_node_index(last_deleted_node_index.index)
+            last_deleted_node_index.into()
         } else {
             assert_eq!(self.removed_nodes_count, 0);
             assert!(self.items.capacity() > self.items.len());
-            let node_child = NodeChild::from_node_index(self.items.len());
+            let node_child: NodeChild = NodeIndex::new(self.items.len()).into();
             self.items.push(node);
             node_child
         }
     }
 
     pub fn update_node(&mut self, node_index: NodeIndex, new_node: Node) {
-        self.items[node_index.index] = new_node;
+        self.items[node_index.value] = new_node;
     }
 
     pub fn delete_node(&mut self, node_index: NodeIndex) {
-        assert!(self.items[node_index.index].is_valid());
         let mut node = Node::INVALID;
         node.children[Direction::Left] = NodeChild::INVALID;
         node.children[Direction::Right] = self.last_deleted_node_idx_opt
-            .map(|node_index| NodeChild::from_node_index(node_index.index))
-            .unwrap_or(NodeChild::INVALID);
-        self.items[node_index.index] = node;
+            .map(|node_index| node_index.into()).unwrap_or(NodeChild::INVALID);
+        self[node_index] = node;
         self.last_deleted_node_idx_opt = Some(node_index);
         self.removed_nodes_count += 1;
     }
@@ -95,7 +118,7 @@ impl ops::Index<NodeIndex> for Nodes {
     type Output = Node;
 
     fn index(&self, node_index: NodeIndex) -> &Node {
-        let index = node_index.index;
+        let index = node_index.value;
         let node = &self.items[index];
         assert!(index >= Nodes::NUM_ROOTS || node.is_valid());
         node
@@ -104,7 +127,7 @@ impl ops::Index<NodeIndex> for Nodes {
 
 impl ops::IndexMut<NodeIndex> for Nodes {
     fn index_mut(&mut self, node_index: NodeIndex) -> &mut Node {
-        let index = node_index.index;
+        let index = node_index.value;
         let node = &mut self.items[index];
         assert!(index >= Nodes::NUM_ROOTS || node.is_valid());
         node

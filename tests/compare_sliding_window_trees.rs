@@ -483,7 +483,7 @@ fn verify_live_nodes_count(tree: &Tree) {
     let mut indices_stack = Vec::new();
 
     let mut visited_nodes = 0;
-    if tree.tree_state == TreeState::Proper {
+    if tree.tree_state() == TreeState::Proper {
         indices_stack.push(tree.get_root_node_index());
     }
 
@@ -512,10 +512,10 @@ fn compare_shape(offset_1: usize, tree_1: &Tree,
 
     let mut visited_nodes_1 = 0;
     let mut visited_nodes_2 = 0;
-    if tree_1.tree_state == TreeState::Proper {
+    if tree_1.tree_state() == TreeState::Proper {
         stack_1.push(tree_1.get_root_node_index());
     }
-    if tree_2.tree_state == TreeState::Proper {
+    if tree_2.tree_state() == TreeState::Proper {
         stack_2.push(tree_2.get_root_node_index());
     }
 

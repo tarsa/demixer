@@ -28,7 +28,7 @@ pub struct Node {
     // counter: SimpleCounter,
     pub text_start: u32,
     history_state: u16,
-    pub depth: u16,
+    depth: u16,
     left_count: u16,
     right_count: u16,
 }

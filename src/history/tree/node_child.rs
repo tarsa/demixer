@@ -16,7 +16,7 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use history::window::WindowIndex;
-use super::nodes::Nodes;
+use super::nodes::{NodeIndex, Nodes};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NodeChild {
@@ -26,11 +26,6 @@ pub struct NodeChild {
 impl NodeChild {
     // root node can't be a child
     pub const INVALID: NodeChild = NodeChild { value: !0 };
-
-    pub fn from_node_index(node_index: usize) -> NodeChild {
-        assert!(node_index >= Nodes::NUM_ROOTS && node_index <= 0x7fff_ffff);
-        NodeChild { value: !(node_index as i32) }
-    }
 
     pub fn is_valid(&self) -> bool {
         self.value >= 0 || (!self.value) as usize >= Nodes::NUM_ROOTS
@@ -50,7 +45,8 @@ impl NodeChild {
     }
 
     pub fn to_node_index(&self) -> NodeIndex {
-        NodeIndex::new(!self.value)
+        assert!(self.value < 0);
+        NodeIndex::new(!self.value as usize)
     }
 }
 
@@ -61,19 +57,10 @@ impl From<WindowIndex> for NodeChild {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NodeIndex {
-    // TODO encapsulate
-    pub index: usize
-}
-
-impl NodeIndex {
-    pub fn new(index: i32) -> NodeIndex {
-        assert!(index >= 0);
-        NodeIndex { index: index as usize }
-    }
-
-    pub fn is_root(&self) -> bool {
-        self.index < Nodes::NUM_ROOTS
+impl From<NodeIndex> for NodeChild {
+    fn from(node_index: NodeIndex) -> NodeChild {
+        let node_index = node_index.raw();
+        assert!(node_index >= Nodes::NUM_ROOTS && node_index <= 0x7fff_ffff);
+        NodeChild { value: !(node_index as i32) }
     }
 }
