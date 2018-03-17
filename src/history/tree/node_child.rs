@@ -16,49 +16,54 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use ::history::tree::nodes::Nodes;
+use ::history::tree::window::WindowIndex;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NodeChild {
-    index: i32
+    value: i32
 }
 
 impl NodeChild {
     // root node can't be a child
-    pub const INVALID: NodeChild = NodeChild { index: !0 };
-
-    pub fn from_window_index(window_index: usize) -> NodeChild {
-        assert!(window_index <= 0x7fff_ffff);
-        NodeChild { index: window_index as i32 }
-    }
+    pub const INVALID: NodeChild = NodeChild { value: !0 };
 
     pub fn from_node_index(node_index: usize) -> NodeChild {
         assert!(node_index >= Nodes::NUM_ROOTS && node_index <= 0x7fff_ffff);
-        NodeChild { index: !(node_index as i32) }
+        NodeChild { value: !(node_index as i32) }
     }
 
     pub fn is_valid(&self) -> bool {
-        self.index >= 0 || (!self.index) as usize >= Nodes::NUM_ROOTS
+        self.value >= 0 || (!self.value) as usize >= Nodes::NUM_ROOTS
     }
 
     pub fn is_window_index(&self) -> bool {
-        self.index >= 0
+        self.value >= 0
     }
 
     pub fn is_node_index(&self) -> bool {
-        self.index < 0
+        self.value < 0
     }
 
     pub fn to_window_index(&self) -> WindowIndex {
-        WindowIndex::new(self.index)
+        assert!(self.value >= 0);
+        WindowIndex::new(self.value as usize)
     }
 
     pub fn to_node_index(&self) -> NodeIndex {
-        NodeIndex::new(!self.index)
+        NodeIndex::new(!self.value)
+    }
+}
+
+impl From<WindowIndex> for NodeChild {
+    fn from(window_index: WindowIndex) -> NodeChild {
+        assert!(window_index.raw() <= 0x7fff_ffff);
+        NodeChild { value: window_index.raw() as i32 }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NodeIndex {
+    // TODO encapsulate
     pub index: usize
 }
 
@@ -70,17 +75,5 @@ impl NodeIndex {
 
     pub fn is_root(&self) -> bool {
         self.index < Nodes::NUM_ROOTS
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WindowIndex {
-    pub index: usize
-}
-
-impl WindowIndex {
-    pub fn new(index: i32) -> WindowIndex {
-        assert!(index >= 0);
-        WindowIndex { index: index as usize }
     }
 }

@@ -38,7 +38,6 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
     let mut tree_source_results = CollectedContextStates::new(max_order);
 
     for (index, byte) in input.iter().enumerate() {
-        tree_source.check_integrity_before_next_byte();
         if run_naive {
             naive_source.start_new_byte();
         }
@@ -48,6 +47,7 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
             println!("started byte #{}, max order = {}", index, max_order);
             tree_source.tree.print();
         }
+        tree_source.check_integrity_on_next_byte();
 
         for bit_index in (0..7 + 1).rev() {
             if run_naive {
@@ -78,7 +78,7 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
                                last_occurrence_index: tree_source.tree.window
                                    .index_subtract(
                                        ctx_state.last_occurrence_index,
-                                       tree_source.tree.window.start),
+                                       tree_source.tree.window.start().raw()),
                                bit_history: ctx_state.bit_history,
                            }
                        }).collect::<Vec<_>>()[..],

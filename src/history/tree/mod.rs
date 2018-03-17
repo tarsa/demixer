@@ -25,19 +25,19 @@ pub mod window;
 use ::PRINT_DEBUG;
 use ::history::{
     CollectedContextStates, ContextState, HistorySource,
-    get_bit, make_bit_run_history, updated_bit_history,
+    make_bit_run_history, updated_bit_history,
 };
 use self::context::{ActiveContexts, Context};
 use self::direction::Direction;
 use self::node::Node;
 use self::node_child::{NodeChild, NodeIndex};
 use self::nodes::Nodes;
-use self::window::InputWindow;
+use self::window::{InputWindow, WindowIndex};
 
 pub struct TreeHistorySource {
     pub tree: Tree,
     pub active_contexts: ActiveContexts,
-    bit_index: usize,
+    pub bit_index: i32,
 }
 
 impl TreeHistorySource {
@@ -49,15 +49,15 @@ impl TreeHistorySource {
         TreeHistorySource {
             tree: Tree::new(nodes, max_window_size, initial_shift, 0),
             active_contexts: ActiveContexts::new(max_order),
-            bit_index: 7,
+            bit_index: -1,
         }
     }
 
-    pub fn check_integrity_before_next_byte(&self) {
+    pub fn check_integrity_on_next_byte(&self) {
         assert_eq!(self.bit_index, 7);
-        self.active_contexts.check_integrity_before_next_byte(&self.tree);
+        self.active_contexts.check_integrity_on_next_byte(&self.tree);
         let max_order = self.active_contexts.max_order();
-        self.tree.check_integrity_before_next_byte(max_order);
+        self.tree.check_integrity_on_next_byte(max_order);
     }
 }
 
@@ -67,30 +67,25 @@ impl HistorySource for TreeHistorySource {
     }
 
     fn start_new_byte(&mut self) {
-        assert_eq!(self.bit_index, 7);
-        self.active_contexts.shift(&mut self.tree);
+        assert_eq!(self.bit_index, -1);
+        self.bit_index = 7;
         self.tree.start_new_byte(&mut self.active_contexts);
+        self.active_contexts.shift(&mut self.tree);
     }
 
     fn gather_history_states(&self,
                              bit_histories: &mut CollectedContextStates) {
+        assert!(self.bit_index >= 0);
         self.tree.gather_states(&self.active_contexts, bit_histories,
-                                self.bit_index);
+                                self.bit_index as usize);
     }
 
     fn process_input_bit(&mut self, input_bit: bool) {
+        assert!(self.bit_index >= 0);
         let max_order = self.active_contexts.max_order();
-        self.tree.extend(&mut self.active_contexts, input_bit, self.bit_index,
-                         max_order);
-        if self.bit_index > 0 {
-            self.bit_index -= 1;
-        } else {
-            self.bit_index = 7;
-            self.tree.window.cursor += 1;
-            if self.tree.window.cursor == self.tree.window.max_size {
-                self.tree.window.cursor = 0;
-            }
-        }
+        self.tree.extend(&mut self.active_contexts, input_bit,
+                         self.bit_index as usize, max_order);
+        self.bit_index -= 1;
     }
 }
 
@@ -111,28 +106,19 @@ pub struct Tree {
 
 impl Tree {
     fn start_new_byte(&mut self, active_contexts: &mut ActiveContexts) {
-        if self.window.size == self.window.max_size {
-            assert_eq!(self.window.start, self.window.cursor);
-            assert_eq!(self.window.max_size, self.window.buffer.len());
+        if self.window.size() == self.window.max_size() {
             self.remove_leftmost_suffix(active_contexts);
-            assert_eq!(self.window.buffer[self.window.cursor], 0);
-        } else {
-            assert!(self.window.size < self.window.max_size);
-            if self.window.buffer.len() < self.window.buffer.capacity() {
-                self.window.buffer.push(0);
-            } else {
-                self.window.buffer[self.window.cursor] = 0;
-            }
+            let next_cursor = self.window.index_increment(self.window.cursor());
+            assert_eq!(self.window[next_cursor], 0);
         }
-        self.window.size += 1;
+        assert!(self.window.size() < self.window.max_size());
+        self.window.advance_cursor();
     }
 
     pub fn remove_leftmost_suffix(&mut self,
                                   active_contexts: &mut ActiveContexts) {
         if self.tree_state == TreeState::Degenerate {
-            self.window.buffer[self.window.start] = 0;
-            self.window.start = self.window.index_increment(self.window.start);
-            self.window.size -= 1;
+            self.window.advance_start();
             return;
         }
         let mut parent_node_index_opt = None;
@@ -144,8 +130,8 @@ impl Tree {
             let depth = self.nodes[node_index].depth();
             let direction: Direction = {
                 let byte_index =
-                    self.window.index_add(self.window.start, depth / 8);
-                get_bit(self.window.buffer[byte_index], 7 - (depth % 8)).into()
+                    self.window.index_add(self.window.start(), depth / 8);
+                self.window.get_bit(byte_index, 7 - (depth % 8)).into()
             };
             let child = self.nodes[node_index].child(direction);
             if child.is_node_index() {
@@ -165,15 +151,15 @@ impl Tree {
         let node_found_in_active_contexts = active_contexts.items.iter()
             .find(|ctx| ctx.node_index.index == node_index.index).is_some();
         if PRINT_DEBUG { print!("DELETING: "); }
-        if leaf_window_index.index != self.window.start {
+        if leaf_window_index != self.window.start() {
             if PRINT_DEBUG {
                 println!("skipped because prefix was repeated");
                 println!("window start = {}, active contexts = {}",
-                         self.window.start, active_contexts);
+                         self.window.start(), active_contexts);
             }
             let mut new_active_contexts_count = active_contexts.count();
             for (order, ctx) in active_contexts.items.iter().enumerate().rev() {
-                if ctx.suffix_index.index == self.window.start {
+                if ctx.suffix_index == self.window.start() {
                     new_active_contexts_count -= 1;
                     assert_eq!(new_active_contexts_count, order);
                 }
@@ -237,8 +223,7 @@ impl Tree {
                     }
                 }
                 self.nodes[parent_node_index].children[node_direction] =
-                    NodeChild::from_window_index(
-                        self.nodes[node_index].text_start());
+                    self.nodes[node_index].text_start().into();
             } else {
                 let leaf_sibling_node_index = leaf_sibling.to_node_index();
                 for ctx in active_contexts.items.iter_mut() {
@@ -276,24 +261,15 @@ impl Tree {
             self.nodes.delete_node(node_index);
             if PRINT_DEBUG { self.print(); }
         }
-        self.window.buffer[self.window.start] = 0;
-        self.window.start = self.window.index_increment(self.window.start);
-        self.window.size -= 1;
+        self.window.advance_start();
     }
 
-    pub fn check_integrity_before_next_byte(&self, max_order: usize) {
-        assert!(self.window.size == self.window.max_size ||
-            (self.window.index_subtract(self.window.cursor, self.window.start)
-                == self.window.size));
+    pub fn check_integrity_on_next_byte(&self, max_order: usize) {
+        assert!(self.window.size() == self.window.max_size() ||
+            (self.window.index_diff(self.window.cursor(), self.window.start()) +
+                1 == self.window.size()));
         // check that all suffices are present in tree
-        let suffices_range =
-            if self.window.size == 0 || self.window.start < self.window.cursor {
-                (self.window.start..self.window.cursor).chain(0..0)
-            } else {
-                (self.window.start..self.window.max_size)
-                    .chain(0..self.window.cursor)
-            };
-        for suffix_start in suffices_range {
+        self.window.for_each_suffix(|suffix_start| {
             let mut node_index_opt =
                 match self.tree_state {
                     TreeState::Proper => Some(self.get_root_node_index()),
@@ -304,12 +280,12 @@ impl Tree {
                 assert!(node.depth() <= max_order * 8 + 7);
                 assert!(self.window.index_is_smaller_or_equal(
                     suffix_start, node.text_start()));
-                if node.depth() / 8 >= self.window.index_subtract(
-                    self.window.cursor, node.text_start()) {
+                if node.depth() / 8 >= self.window.index_diff(
+                    self.window.cursor(), node.text_start()) {
                     assert!(self.window.compare_for_equal_prefix(
                         suffix_start, node.text_start(), 7,
-                        self.window.index_subtract(
-                            self.window.cursor, node.text_start())));
+                        self.window.index_diff(
+                            self.window.cursor(), node.text_start())));
 //                    if PRINT_DEBUG { println!("CHECK early exit"); }
                     break;
                 }
@@ -317,12 +293,12 @@ impl Tree {
                 let bit_index = 7 - (node.depth % 8) as usize;
                 assert!(
                     self.window.compare_for_equal_prefix(
-                        suffix_start, node.text_start as usize,
+                        suffix_start, node.text_start(),
                         bit_index, full_byte_length),
                     "suffix start = {}, depth bytes = {}, bit index = {}, \
                     window pos = {}, node index = {}",
                     suffix_start, full_byte_length, bit_index,
-                    self.window.cursor, node_index.index);
+                    self.window.cursor(), node_index.index);
                 if self.window.bytes_differ_on(
                     self.window.index_add(suffix_start, full_byte_length),
                     self.window.index_add(node.text_start(), full_byte_length),
@@ -332,31 +308,31 @@ impl Tree {
                 let bit = {
                     let byte_index =
                         self.window.index_add(suffix_start, full_byte_length);
-                    get_bit(self.window.buffer[byte_index], bit_index)
+                    self.window.get_bit(byte_index, bit_index)
                 };
                 let child = node.child(bit.into());
                 if child.is_node_index() {
                     node_index_opt = Some(child.to_node_index());
 //                    if PRINT_DEBUG { println!("CHECK descend"); }
                 } else {
-                    let leaf_index = child.to_window_index().index;
+                    let leaf_index = child.to_window_index();
                     assert!(self.window.index_is_smaller_or_equal(
                         suffix_start, leaf_index));
                     assert!(
                         self.window.compare_for_equal_prefix(
                             suffix_start, leaf_index, 7,
-                            max_order.min(self.window.index_subtract(
-                                self.window.cursor, leaf_index))),
+                            max_order.min(self.window.index_diff(
+                                self.window.cursor(), leaf_index))),
                         "suffix start = {}, leaf index = {}, window pos = {}",
-                        suffix_start, leaf_index, self.window.cursor);
+                        suffix_start, leaf_index, self.window.cursor());
                     node_index_opt = None;
 //                    if PRINT_DEBUG { println!("CHECK leaf"); }
                 }
             }
-        }
+        });
         // check that all leaves correspond to different suffices
         if self.tree_state == TreeState::Proper {
-            let mut suffices_counters = vec![0u8; self.window.size];
+            let mut suffices_counters = vec![0u8; self.window.size()];
             let mut stack = Vec::new();
             stack.push(self.get_root_node_index());
             while let Some(node_index) = stack.pop() {
@@ -366,8 +342,8 @@ impl Tree {
                     if child.is_node_index() {
                         stack.push(child.to_node_index());
                     } else {
-                        let window_offset = self.window.index_subtract(
-                            child.to_window_index().index, self.window.start);
+                        let window_offset = self.window.index_diff(
+                            child.to_window_index(), self.window.start());
                         suffices_counters[window_offset] += 1;
                     }
                 }
@@ -395,33 +371,22 @@ impl Tree {
                             depth + 1);
         } else {
             println!("{}{}", "   ".repeat(depth + 1),
-                     node.child(Direction::Left).to_window_index().index);
+                     node.child(Direction::Left).to_window_index());
         }
         if node.child(Direction::Right).is_node_index() {
             self.print_node(node.child(Direction::Right).to_node_index(),
                             depth + 1);
         } else {
             println!("{}{}", "   ".repeat(depth + 1),
-                     node.child(Direction::Right).to_window_index().index);
+                     node.child(Direction::Right).to_window_index());
         }
     }
 
     pub fn new(nodes: Nodes, max_window_size: usize, initial_shift: usize,
                root_index: i32) -> Tree {
-        assert!(max_window_size > 0);
-        let mut buffer = Vec::with_capacity(max_window_size);
-        buffer.resize(initial_shift, 0);
-        assert_eq!(buffer.capacity(), max_window_size);
-        assert_eq!(buffer.len(), initial_shift);
         Tree {
             nodes,
-            window: InputWindow {
-                buffer,
-                start: initial_shift,
-                cursor: initial_shift,
-                size: 0,
-                max_size: max_window_size,
-            },
+            window: InputWindow::new(max_window_size, initial_shift),
             tree_state: TreeState::Degenerate,
             root_index,
         }
@@ -441,22 +406,22 @@ impl Tree {
         collected_states.reset();
         match self.tree_state {
             TreeState::Proper => {
-                assert_ne!(self.window.cursor, self.window.start);
+                assert_ne!(self.window.cursor(), self.window.start());
                 for (order, context) in
                     active_contexts.items.iter().enumerate() {
                     let node = &self.nodes[context.node_index];
-                    let last_occurrence_index = context.suffix_index.index;
+                    let last_occurrence_index = context.suffix_index;
                     assert!(self.window.index_is_smaller(
                         last_occurrence_index, self.window.index_subtract(
-                            self.window.cursor, order)));
+                            self.window.cursor(), order)));
                     let bit_history =
                         if node.depth() == order * 8 + 7 - bit_index {
                             node.history_state()
                         } else {
                             assert_ne!(context.incoming_edge_visits_count, -1);
-                            let repeated_bit = get_bit(
-                                self.window.buffer[self.window.index_add(
-                                    last_occurrence_index, order)], bit_index);
+                            let repeated_bit = self.window.get_bit(
+                                self.window.index_add(
+                                    last_occurrence_index, order), bit_index);
                             make_bit_run_history(
                                 context.incoming_edge_visits_count as usize,
                                 repeated_bit)
@@ -474,15 +439,15 @@ impl Tree {
             TreeState::Degenerate => {
                 assert_eq!(active_contexts.count(), 0);
                 let count = (active_contexts.max_order() + 1)
-                    .min(self.window.size - 1);
+                    .min(self.window.size() - 1);
                 for order in 0..count {
                     collected_states.items.push(ContextState {
                         last_occurrence_index: self.window.index_subtract(
-                            self.window.cursor, order + 1),
+                            self.window.cursor(), order + 1),
                         bit_history: make_bit_run_history(
-                            self.window.size - order - 1,
-                            get_bit(self.window.buffer[self.window.start],
-                                    bit_index)),
+                            self.window.size() - order - 1,
+                            self.window.get_bit(self.window.start(),
+                                                bit_index)),
                     });
                 }
             }
@@ -491,8 +456,7 @@ impl Tree {
 
     pub fn extend(&mut self, active_contexts: &mut ActiveContexts,
                   incoming_bit: bool, bit_index: usize, max_order: usize) {
-        self.window.buffer[self.window.cursor] |=
-            (incoming_bit as u8) << bit_index;
+        self.window.set_bit_at_cursor(incoming_bit, bit_index);
         match self.tree_state {
             TreeState::Proper => {
                 let mut count = active_contexts.count();
@@ -517,9 +481,8 @@ impl Tree {
                         context.descend(self, order, bit_index);
                         if PRINT_DEBUG { self.print(); }
                     } else if self.window.bytes_differ_on(
-                        self.window.index_add(
-                            context.suffix_index.index, order),
-                        self.window.cursor, bit_index,
+                        self.window.index_add(context.suffix_index, order),
+                        self.window.cursor(), bit_index,
                     ) {
                         assert!(
                             context.in_leaf || self.nodes()[node_index].depth()
@@ -535,11 +498,11 @@ impl Tree {
             }
             TreeState::Degenerate => {
                 assert_eq!(active_contexts.count(), 0);
-                if self.window.size >= 2 && self.window.bytes_differ_on(
-                    self.window.index_decrement(self.window.cursor),
-                    self.window.cursor, bit_index,
+                if self.window.size() >= 2 && self.window.bytes_differ_on(
+                    self.window.index_decrement(self.window.cursor()),
+                    self.window.cursor(), bit_index,
                 ) {
-                    let order = max_order.min(self.window.size - 2);
+                    let order = max_order.min(self.window.size() - 2);
                     self.split_degenerate_root_edge(order, bit_index);
                     self.tree_state = TreeState::Proper;
                     if PRINT_DEBUG { self.print(); }
@@ -555,7 +518,7 @@ impl Tree {
     fn split_edge(&mut self, context: &Context, context_order: usize,
                   bit_index: usize) {
         let direction: Direction =
-            get_bit(self.window.buffer[self.window.cursor], bit_index).into();
+            self.window.get_bit(self.window.cursor(), bit_index).into();
         let node_index = context.node_index;
         if !context.in_leaf {
             if PRINT_DEBUG {
@@ -565,9 +528,9 @@ impl Tree {
             if PRINT_DEBUG { print!(", node = {}", new_node); }
             let mut node = self.setup_split_edge(
                 context, context_order, bit_index, new_node.text_start());
-            new_node.text_start = context.suffix_index.index as u32;
-            node.children[direction] = NodeChild::from_window_index(
-                self.window.index_subtract(self.window.cursor, context_order));
+            new_node.text_start = context.suffix_index.raw() as u32;
+            node.children[direction] = self.window.index_subtract(
+                self.window.cursor(), context_order).into();
             if PRINT_DEBUG { print!(", new child = {}", new_node) }
             node.children[!direction] = self.nodes.add_node(new_node);
             if PRINT_DEBUG { print!(", new parent = {}", node); }
@@ -581,11 +544,10 @@ impl Tree {
             let mut new_node = self.setup_split_edge(
                 context, context_order, bit_index,
                 node.children[context.direction_from_parent.unwrap()]
-                    .to_window_index().index);
-            new_node.children[direction] = NodeChild::from_window_index(
-                self.window.index_subtract(self.window.cursor, context_order));
-            new_node.children[!direction] =
-                NodeChild::from_window_index(context.suffix_index.index);
+                    .to_window_index());
+            new_node.children[direction] = self.window.index_subtract(
+                self.window.cursor(), context_order).into();
+            new_node.children[!direction] = context.suffix_index.into();
             if PRINT_DEBUG { print!(", new child = {}", new_node) }
             node.children[context.direction_from_parent.unwrap()] =
                 self.nodes.add_node(new_node);
@@ -596,11 +558,11 @@ impl Tree {
     }
 
     fn setup_split_edge(&self, context: &Context, context_order: usize,
-                        bit_index: usize, text_start: usize) -> Node {
+                        bit_index: usize, text_start: WindowIndex) -> Node {
         assert_ne!(context.incoming_edge_visits_count, -1);
         let incoming_edge_visits_count =
             context.incoming_edge_visits_count as usize;
-        let bit = get_bit(self.window.buffer[self.window.cursor], bit_index);
+        let bit = self.window.get_bit(self.window.cursor(), bit_index);
         let direction: Direction = bit.into();
         let bit_history = updated_bit_history(make_bit_run_history(
             incoming_edge_visits_count, !bit), bit);
@@ -618,24 +580,23 @@ impl Tree {
             println!("SPLIT: Splitting degenerate root edge, order = {}",
                      context_order);
         }
-        let bit = get_bit(self.window.buffer[self.window.cursor], bit_index);
+        let bit = self.window.get_bit(self.window.cursor(), bit_index);
         let direction: Direction = bit.into();
         let mut last_node_index_opt = None;
         for current_context_order in (0..context_order + 1).rev() {
             let suffix_start = self.window.index_subtract(
-                self.window.cursor, current_context_order);
-            let branching_child = NodeChild::from_window_index(suffix_start);
+                self.window.cursor(), current_context_order);
+            let branching_child: NodeChild = suffix_start.into();
             let chained_child = last_node_index_opt.unwrap_or(
-                NodeChild::from_window_index(
-                    self.window.index_decrement(suffix_start)));
+                self.window.index_decrement(suffix_start).into());
             let children = [
                 direction.fold(|| branching_child, || chained_child),
                 direction.fold(|| chained_child, || branching_child),
             ];
             let bit_history = updated_bit_history(make_bit_run_history(
-                self.window.size - current_context_order - 1, !bit), bit);
+                self.window.size() - current_context_order - 1, !bit), bit);
             let repeated_edge_count = 63.min(
-                self.window.index_subtract(suffix_start, self.window.start));
+                self.window.index_diff(suffix_start, self.window.start()));
             let node = Node::new(
                 suffix_start,
                 current_context_order * 8 + 7 - bit_index,

@@ -19,11 +19,12 @@ pub mod naive;
 pub mod fat_map;
 pub mod tree;
 
+use self::tree::window::WindowIndex;
+
 // TODO convert to enum with variants: ForNode, ForEdge
 #[derive(Debug, Eq, PartialEq)]
 pub struct ContextState {
-    // TODO wrap in WindowIndex
-    pub last_occurrence_index: usize,
+    pub last_occurrence_index: WindowIndex,
     // TODO wrap in BitHistory
     pub bit_history: u32,
 }
@@ -72,33 +73,4 @@ fn make_bit_run_history(uncapped_length: usize, repeated_bit: bool) -> u32 {
 
 fn updated_bit_history(bit_history: u32, next_bit: bool) -> u32 {
     ((bit_history << 1) & 2047) | (next_bit as u32) | (bit_history & 1024)
-}
-
-pub fn get_bit(byte: u8, bit_index: usize) -> bool {
-    ((byte >> bit_index) & 1) == 1
-}
-
-fn bytes_differ_on(first_byte_index: usize, second_byte_index: usize,
-                   bit_index: usize, input_block: &[u8]) -> bool {
-    get_bit(input_block[first_byte_index] ^ input_block[second_byte_index],
-            bit_index)
-}
-
-fn compare_for_equal_prefix(contents: &[u8], starting_index_first: usize,
-                            starting_index_second: usize, bit_index: usize,
-                            full_byte_length: usize) -> bool {
-    let mut equal = true;
-    for position in 0..full_byte_length {
-        equal &= contents[starting_index_first + position] ==
-            contents[starting_index_second + position];
-        if !equal { break };
-    }
-    let mut bit_position = 7;
-    while equal && bit_position > bit_index {
-        equal &= !bytes_differ_on(starting_index_first + full_byte_length,
-                                  starting_index_second + full_byte_length,
-                                  bit_position, contents);
-        bit_position -= 1;
-    }
-    equal
 }

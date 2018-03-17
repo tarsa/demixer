@@ -19,32 +19,31 @@ use history::{
     HistorySource,
     ContextState,
     CollectedContextStates,
-    updated_bit_history, get_bit, compare_for_equal_prefix,
+    updated_bit_history,
 };
+use history::tree::window::{InputWindow, WindowIndex};
 
 pub struct NaiveHistorySource {
-    input: Vec<u8>,
-    input_cursor: usize,
-    bit_index: usize,
+    input: InputWindow,
+    bit_index: i32,
     max_order: usize,
 }
 
 impl HistorySource for NaiveHistorySource {
     fn new(max_window_size: usize, max_order: usize) -> NaiveHistorySource {
         NaiveHistorySource {
-            input: Vec::with_capacity(max_window_size),
-            input_cursor: 0,
-            bit_index: 7,
+            input: InputWindow::new(max_window_size, 0),
+            bit_index: -1,
             max_order,
         }
     }
 
     fn start_new_byte(&mut self) {
-        assert_eq!(self.bit_index, 7);
-        assert_eq!(self.input_cursor, self.input.len());
-        assert_ne!(self.input.len(), self.input.capacity(),
+        assert_eq!(self.bit_index, -1);
+        self.bit_index = 7;
+        assert_ne!(self.input.size(), self.input.max_size(),
                    "input window is filled up, but sliding is not implemented");
-        self.input.push(0);
+        self.input.advance_cursor();
     }
 
     fn gather_history_states(&self,
@@ -52,15 +51,20 @@ impl HistorySource for NaiveHistorySource {
         for order in 0..(self.max_order + 1) {
             let mut last_occurrence_index_opt = None;
             let mut bit_history = 1;
-            for scanned_index in 0..(self.input_cursor - order) {
-                let prefix_equal = compare_for_equal_prefix(
-                    &self.input, scanned_index, self.input_cursor - order,
-                    self.bit_index, order,
+            let stop_search_position =
+                self.input.index_subtract(self.input.cursor(), order).raw();
+            for scanned_index in 0..stop_search_position {
+                let scanned_index = WindowIndex::new(scanned_index);
+                let prefix_equal = self.input.compare_for_equal_prefix(
+                    scanned_index,
+                    self.input.index_subtract(self.input.cursor(), order),
+                    self.bit_index as usize, order,
                 );
                 if prefix_equal {
                     last_occurrence_index_opt = Some(scanned_index);
-                    let next_bit = get_bit(self.input[scanned_index + order],
-                                           self.bit_index);
+                    let next_bit = self.input.get_bit(
+                        self.input.index_add(scanned_index, order),
+                        self.bit_index as usize);
                     bit_history = updated_bit_history(bit_history, next_bit);
                 }
             }
@@ -75,12 +79,7 @@ impl HistorySource for NaiveHistorySource {
     }
 
     fn process_input_bit(&mut self, input_bit: bool) {
-        self.input[self.input_cursor] |= (input_bit as u8) << self.bit_index;
-        if self.bit_index > 0 {
-            self.bit_index -= 1;
-        } else {
-            self.bit_index = 7;
-            self.input_cursor += 1;
-        }
+        self.input.set_bit_at_cursor(input_bit, self.bit_index as usize);
+        self.bit_index -= 1;
     }
 }

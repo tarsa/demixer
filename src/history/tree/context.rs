@@ -20,11 +20,10 @@ use std::collections::HashMap;
 use std::ops;
 
 use ::PRINT_DEBUG;
-use ::history::get_bit;
 use ::history::tree::{Tree, TreeState};
 use ::history::tree::direction::Direction;
-use ::history::tree::node_child::{NodeChild, NodeIndex, WindowIndex};
-use ::history::tree::window::InputWindow;
+use ::history::tree::node_child::NodeIndex;
+use ::history::tree::window::{InputWindow, WindowIndex};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Context {
@@ -39,7 +38,7 @@ impl Context {
     pub fn descend(&mut self, tree: &mut Tree, order: usize, bit_index: usize) {
         assert!(!self.in_leaf);
         let direction: Direction =
-            get_bit(tree.window.buffer[tree.window.cursor], bit_index).into();
+            tree.window.get_bit(tree.window.cursor(), bit_index).into();
         self.direction_from_parent = Some(direction);
         let node_index = self.node_index;
         self.incoming_edge_visits_count = {
@@ -55,17 +54,14 @@ impl Context {
         if child.is_window_index() {
             self.in_leaf = true;
             self.suffix_index = child.to_window_index();
-            tree.nodes_mut()[node_index].children[direction] = {
-                let window_index =
-                    tree.window.index_subtract(tree.window.cursor, order);
-                NodeChild::from_window_index(window_index)
-            };
+            tree.nodes_mut()[node_index].children[direction] =
+                tree.window.index_subtract(tree.window.cursor(), order).into();
         } else {
             self.node_index = child.to_node_index();
-            self.suffix_index = WindowIndex::new(
-                tree.nodes()[self.node_index].text_start as i32);
+            self.suffix_index = tree.nodes()[self.node_index].text_start();
             tree.nodes_mut()[self.node_index].text_start =
-                tree.window.index_subtract(tree.window.cursor, order) as u32;
+                tree.window.index_subtract(tree.window.cursor(),
+                                           order).raw() as u32;
         }
         if PRINT_DEBUG {
             println!("DESCEND, order = {}, after = {}", order, self);
@@ -75,9 +71,7 @@ impl Context {
     pub fn prepare_for_test(&self, offset: usize,
                             window: &InputWindow) -> Context {
         Context {
-            suffix_index: WindowIndex {
-                index: window.index_subtract(self.suffix_index.index, offset)
-            },
+            suffix_index: window.index_subtract(self.suffix_index, offset),
             node_index: NodeIndex::new(<i32>::max_value()),
             incoming_edge_visits_count: 0,
             ..self.clone()
@@ -88,7 +82,7 @@ impl Context {
 impl fmt::Display for Context {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "sfx:{},node:{},incnt:{},inleaf:{},dir:{}",
-               self.suffix_index.index,
+               self.suffix_index,
                self.node_index.index,
                self.incoming_edge_visits_count,
                self.in_leaf,
@@ -118,13 +112,13 @@ impl ActiveContexts {
             self.items.pop().unwrap();
         }
         let root_index = tree.get_root_node_index();
-        tree.nodes[root_index].text_start = tree.window.cursor as u32;
+        tree.nodes[root_index].text_start = tree.window.cursor().raw() as u32;
         let root = &tree.nodes[root_index];
         let incoming_edge_visits_count =
             63.min(root.left_count() + root.right_count()) as i32;
-        let suffix_index = tree.window.index_decrement(tree.window.cursor);
+        let suffix_index = tree.window.index_decrement(tree.window.cursor());
         self.items.insert(0, Context {
-            suffix_index: WindowIndex::new(suffix_index as i32),
+            suffix_index,
             node_index: root_index,
             in_leaf: false,
             incoming_edge_visits_count,
@@ -148,12 +142,12 @@ impl ActiveContexts {
         &self.items
     }
 
-    pub fn check_integrity_before_next_byte(&self, tree: &Tree) {
+    pub fn check_integrity_on_next_byte(&self, tree: &Tree) {
         if tree.tree_state == TreeState::Proper {
             let mut contexts_suffixes_map = HashMap::new();
             for ctx in self.items.iter() {
                 contexts_suffixes_map.insert(ctx.node_index.index,
-                                             ctx.suffix_index.index);
+                                             ctx.suffix_index);
             }
             let mut stack = Vec::new();
             stack.push(tree.get_root_node_index());
@@ -174,7 +168,7 @@ impl ActiveContexts {
                         stack.push(child.to_node_index());
                     } else {
                         assert!(tree.window.compare_for_equal_prefix(
-                            node_text_start, child.to_window_index().index,
+                            node_text_start, child.to_window_index(),
                             bit_index, full_byte_length));
                     }
                 }

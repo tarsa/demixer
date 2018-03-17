@@ -20,6 +20,7 @@ use core::fmt;
 use ::history::updated_bit_history;
 use ::history::tree::direction::Direction;
 use ::history::tree::node_child::NodeChild;
+use ::history::tree::window::WindowIndex;
 
 #[derive(Clone)]
 pub struct Node {
@@ -42,17 +43,17 @@ impl Node {
         right_count: 0,
     };
 
-    pub fn new(text_start: usize, depth: usize,
+    pub fn new(text_start: WindowIndex, depth: usize,
                left_count: usize, right_count: usize, history_state: u32,
                children: [NodeChild; 2]) -> Node {
-        assert!((text_start as u64) < 1u64 << 31);
+        assert!((text_start.raw() as u64) < 1u64 << 31);
         assert!((depth as u64) < 1u64 << 16);
         assert!((left_count as u64) < 1u64 << 16);
         assert!((right_count as u64) < 1u64 << 16);
         assert!((history_state as u64) < 1u64 << 16);
         Node {
             children,
-            text_start: text_start as u32,
+            text_start: text_start.raw() as u32,
             history_state: history_state as u16,
             depth: depth as u16,
             left_count: left_count as u16,
@@ -65,8 +66,8 @@ impl Node {
             self.children[1] != NodeChild::INVALID
     }
 
-    pub fn text_start(&self) -> usize {
-        self.text_start as usize
+    pub fn text_start(&self) -> WindowIndex {
+        WindowIndex::new(self.text_start as usize)
     }
 
     pub fn depth(&self) -> usize {

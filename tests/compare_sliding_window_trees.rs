@@ -264,7 +264,6 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
 
     if PRINT_DEBUG { println!("FILLING UP tree 1 with prefix data"); }
     for (index, byte) in prefix_1.iter().enumerate() {
-        source_1.check_integrity_before_next_byte();
         source_1.start_new_byte();
         if PRINT_DEBUG {
             println!("prefix 1: started byte #{}, max order = {}, \
@@ -272,6 +271,7 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                      index, max_order, max_window_size, &prefix_1[..index + 1]);
             source_1.tree.print();
         }
+        source_1.check_integrity_on_next_byte();
         for bit_index in (0..7 + 1).rev() {
             verify_live_nodes_count(&source_1.tree);
             if PRINT_DEBUG {
@@ -290,7 +290,6 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
 
     if PRINT_DEBUG { println!("FILLING UP tree 2 with prefix data"); }
     for (index, byte) in prefix_2.iter().enumerate() {
-        source_2.check_integrity_before_next_byte();
         source_2.start_new_byte();
         if PRINT_DEBUG {
             println!("prefix 2: started byte #{}, max order = {}, \
@@ -298,6 +297,7 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                      index, max_order, max_window_size, &prefix_2[..index + 1]);
             source_2.tree.print();
         }
+        source_2.check_integrity_on_next_byte();
         for bit_index in (0..7 + 1).rev() {
             verify_live_nodes_count(&source_2.tree);
             if PRINT_DEBUG {
@@ -330,20 +330,20 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                       max window size = {}",
                      index, max_order, max_window_size);
         }
+        source_1.start_new_byte();
         if PRINT_DEBUG {
             println!("source 1, prefix = {:?}, common = {:?}",
                      prefix_1, &common[..index + 1]);
             source_1.tree.print();
         }
-        source_1.check_integrity_before_next_byte();
-        source_1.start_new_byte();
+        source_1.check_integrity_on_next_byte();
+        source_2.start_new_byte();
         if PRINT_DEBUG {
             println!("source 2, prefix = {:?}, common = {:?}",
                      prefix_2, &common[..index + 1]);
             source_2.tree.print();
         }
-        source_2.check_integrity_before_next_byte();
-        source_2.start_new_byte();
+        source_2.check_integrity_on_next_byte();
 
         for bit_index in (0..7 + 1).rev() {
             verify_live_nodes_count(&source_1.tree);
@@ -384,20 +384,20 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                       max window size = {}",
                      index, max_order, max_window_size);
         }
+        source_1.start_new_byte();
         if PRINT_DEBUG {
             println!("source 1, prefix = {:?}, common = {:?}",
                      prefix_1, &common[..index + 1]);
             source_1.tree.print();
         }
-        source_1.check_integrity_before_next_byte();
-        source_1.start_new_byte();
+        source_1.check_integrity_on_next_byte();
+        source_2.start_new_byte();
         if PRINT_DEBUG {
             println!("source 2, prefix = {:?}, common = {:?}",
                      prefix_2, &common[..index + 1]);
             source_2.tree.print();
         }
-        source_2.check_integrity_before_next_byte();
-        source_2.start_new_byte();
+        source_2.check_integrity_on_next_byte();
 
         for bit_index in (0..7 + 1).rev() {
             compare_shape(offset_1, &source_1.tree, offset_2, &source_2.tree);
@@ -445,6 +445,10 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
     }
 
     if PRINT_DEBUG { println!("SHRINKING BOTH SOURCES"); }
+    assert_eq!(source_1.bit_index, -1);
+    assert_eq!(source_2.bit_index, -1);
+    source_1.bit_index = 7;
+    source_2.bit_index = 7;
     for index in 0..max_window_size {
         if PRINT_DEBUG {
             println!("SHRINKING: started byte #{}, max order = {}, \
@@ -456,14 +460,14 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                      prefix_1, &common[..index + 1]);
             source_1.tree.print();
         }
-        source_1.check_integrity_before_next_byte();
+        source_1.check_integrity_on_next_byte();
         source_1.tree.remove_leftmost_suffix(&mut source_1.active_contexts);
         if PRINT_DEBUG {
             println!("source 2, prefix = {:?}, common = {:?}",
                      prefix_2, &common[..index + 1]);
             source_2.tree.print();
         }
-        source_2.check_integrity_before_next_byte();
+        source_2.check_integrity_on_next_byte();
         source_2.tree.remove_leftmost_suffix(&mut source_2.active_contexts);
 
         compare_shape(offset_1, &source_1.tree, offset_2, &source_2.tree);
@@ -471,8 +475,8 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
         if PRINT_DEBUG { println!(); }
     }
 
-    assert_eq!(source_1.tree.window.size, 0);
-    assert_eq!(source_2.tree.window.size, 0);
+    assert_eq!(source_1.tree.window.size(), 0);
+    assert_eq!(source_2.tree.window.size(), 0);
 }
 
 fn verify_live_nodes_count(tree: &Tree) {

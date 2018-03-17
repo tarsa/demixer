@@ -21,10 +21,11 @@ extern crate demixer;
 use std::io::prelude::*;
 
 use demixer::MAX_ORDER;
-use demixer::history::{CollectedContextStates, HistorySource, get_bit};
+use demixer::history::{CollectedContextStates, HistorySource};
 use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
 use demixer::history::tree::TreeHistorySource;
+use demixer::history::tree::window::get_bit;
 
 fn main() {
     print_banner();
