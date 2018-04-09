@@ -15,13 +15,4 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-extern crate core;
-
-pub mod fixed_point;
-pub mod history;
-pub mod lut;
-pub mod random;
-
-pub const MAX_ORDER: usize = 63;
-
-pub const PRINT_DEBUG: bool = 2 + 2 == 5;
+pub mod log2;

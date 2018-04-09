@@ -15,13 +15,28 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-extern crate core;
+use super::*;
 
-pub mod fixed_point;
-pub mod history;
-pub mod lut;
-pub mod random;
+use lut::log2::LOG2_ACCURATE_BITS;
 
-pub const MAX_ORDER: usize = 63;
+#[derive(Debug, PartialEq, Eq)]
+pub struct Log2D(i32);
 
-pub const PRINT_DEBUG: bool = 2 + 2 == 5;
+impl FixedPoint for Log2D {
+    type Raw = i32;
+    fn raw(&self) -> i32 { self.0 }
+    fn new_raw(raw: i32) -> Self { Log2D(raw) }
+
+    const FRACTIONAL_BITS: u8 = LOG2_ACCURATE_BITS;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Log2Q(i64);
+
+impl FixedPoint for Log2Q {
+    type Raw = i64;
+    fn raw(&self) -> i64 { self.0 }
+    fn new_raw(raw: i64) -> Self { Log2Q(raw) }
+
+    const FRACTIONAL_BITS: u8 = LOG2_ACCURATE_BITS;
+}
