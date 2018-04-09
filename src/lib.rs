@@ -18,6 +18,7 @@
 extern crate core;
 
 pub mod history;
+pub mod random;
 
 pub const MAX_ORDER: usize = 63;
 
