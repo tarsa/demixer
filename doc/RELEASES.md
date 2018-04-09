@@ -1,5 +1,12 @@
 # Releases
 
+### Version 0.6.0
+
+- Implemented entropy coding and estimation
+  - entropy coding is not yet used
+  - estimation is based on portable log2 implementation
+  - portable log2 is based on fixed point numbers
+
 ### Version 0.5.0
 
 - Implemented window sliding for tree based history source

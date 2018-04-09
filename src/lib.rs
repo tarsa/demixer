@@ -17,6 +17,7 @@
  */
 extern crate core;
 
+pub mod entropy;
 pub mod fixed_point;
 pub mod history;
 pub mod lut;
