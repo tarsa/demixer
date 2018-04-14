@@ -22,6 +22,7 @@ pub mod node_child;
 pub mod nodes;
 
 use PRINT_DEBUG;
+use bit::Bit;
 use super::{
     CollectedContextStates, ContextState, HistorySource,
     make_bit_run_history, updated_bit_history,
@@ -79,7 +80,7 @@ impl HistorySource for TreeHistorySource {
                                 self.bit_index as usize);
     }
 
-    fn process_input_bit(&mut self, input_bit: bool) {
+    fn process_input_bit(&mut self, input_bit: Bit) {
         assert!(self.bit_index >= 0);
         let max_order = self.active_contexts.max_order();
         self.tree.extend(&mut self.active_contexts, input_bit,
@@ -458,7 +459,7 @@ impl Tree {
     }
 
     pub fn extend(&mut self, active_contexts: &mut ActiveContexts,
-                  incoming_bit: bool, bit_index: usize, max_order: usize) {
+                  incoming_bit: Bit, bit_index: usize, max_order: usize) {
         self.window.set_bit_at_cursor(incoming_bit, bit_index);
         match self.tree_state {
             TreeState::Proper => {

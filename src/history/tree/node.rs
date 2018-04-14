@@ -17,6 +17,7 @@
  */
 use core::fmt;
 
+use bit::Bit;
 use history::updated_bit_history;
 use history::window::WindowIndex;
 use super::direction::Direction;
@@ -98,7 +99,8 @@ impl Node {
                 self.right_count = 63.min(self.right_count + 1),
         }
         self.history_state = updated_bit_history(
-            self.history_state(), direction.fold(|| false, || true)) as u16;
+            self.history_state(),
+            direction.fold(|| Bit::Zero, || Bit::One)) as u16;
     }
 }
 

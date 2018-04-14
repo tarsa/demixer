@@ -26,7 +26,7 @@ struct FixU32F17(u32);
 impl FixedPoint for FixU32F17 {
     type Raw = u32;
     fn raw(&self) -> u32 { self.0 }
-    fn new_raw(raw: u32) -> Self { FixU32F17(raw) }
+    fn new_unchecked(raw: u32) -> Self { FixU32F17(raw) }
 
     const FRACTIONAL_BITS: u8 = 17;
 }
@@ -36,7 +36,7 @@ struct FixU64F33(u64);
 impl FixedPoint for FixU64F33 {
     type Raw = u64;
     fn raw(&self) -> u64 { self.0 }
-    fn new_raw(raw: u64) -> Self { FixU64F33(raw) }
+    fn new_unchecked(raw: u64) -> Self { FixU64F33(raw) }
 
     const FRACTIONAL_BITS: u8 = 33;
 }

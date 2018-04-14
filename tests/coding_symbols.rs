@@ -19,6 +19,7 @@ extern crate demixer;
 
 use std::io::{Read, Write};
 
+use demixer::bit::Bit;
 use demixer::entropy::FinalProbability;
 use demixer::entropy::decoder::Decoder;
 use demixer::entropy::encoder::Encoder;
@@ -28,7 +29,7 @@ use demixer::lut::log2::{Log2Lut, make_log2_lut};
 use demixer::random::MersenneTwister;
 
 enum CodingEvent {
-    BitWithProb { probability: FinalProbability, value: bool },
+    BitWithProb { probability: FinalProbability, value: Bit },
     RareEvent { happened: bool },
 }
 
@@ -39,8 +40,8 @@ fn coding_is_reversible_for_empty_input() {
 
 #[test]
 fn coding_is_reversible_for_single_event() {
-    check_coding_is_reversible(&[bit_with_prob(0xf83, true)], Some(4));
-    check_coding_is_reversible(&[bit_with_prob(0xf83, false)], Some(4));
+    check_coding_is_reversible(&[bit_with_prob(0x73_4396, true)], Some(4));
+    check_coding_is_reversible(&[bit_with_prob(0x73_4396, false)], Some(4));
     check_coding_is_reversible(&[rare_event(true)], Some(4));
     check_coding_is_reversible(&[rare_event(false)], Some(4));
 }
@@ -61,10 +62,10 @@ fn coding_can_be_estimated() {
     for &length in [0, 1, 2, 3, 4, 5, 10, 20, 30, 80, 200, 1000, 8000].iter() {
         for _ in 0..5 {
             let events = generate_events(&mut prng, length, true);
-            let mut size = Log2Q::new_raw(0);
+            let mut size = Log2Q::new_unchecked(0);
             for event in events.iter() {
                 let event_cost = estimate_event_cost(event, &lut);
-                size = fix_i64::add(&size, &event_cost);
+                size = size.add(&event_cost);
             }
             let mut buffer = Vec::new();
             encode_events(&events, &mut buffer);
@@ -76,8 +77,8 @@ fn coding_can_be_estimated() {
 
 fn bit_with_prob(probability: u32, value: bool) -> CodingEvent {
     CodingEvent::BitWithProb {
-        probability: FinalProbability::new(probability, 12),
-        value,
+        probability: FinalProbability::new(probability, 23),
+        value: value.into(),
     }
 }
 

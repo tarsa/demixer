@@ -20,6 +20,7 @@ pub mod fat_map;
 pub mod tree;
 pub mod window;
 
+use bit::Bit;
 use self::window::WindowIndex;
 
 // TODO convert to enum with variants: ForNode, ForEdge
@@ -63,15 +64,15 @@ pub trait HistorySource {
     fn gather_history_states(
         &self, context_states: &mut CollectedContextStates);
 
-    fn process_input_bit(&mut self, input_bit: bool);
+    fn process_input_bit(&mut self, input_bit: Bit);
 }
 
-fn make_bit_run_history(uncapped_length: usize, repeated_bit: bool) -> u32 {
+fn make_bit_run_history(uncapped_length: usize, repeated_bit: Bit) -> u32 {
     let length = 10.min(uncapped_length);
-    let bit = repeated_bit as u32;
+    let bit = repeated_bit.to_u32();
     (1 << length) | (((1 << length) - 1) * bit)
 }
 
-fn updated_bit_history(bit_history: u32, next_bit: bool) -> u32 {
-    ((bit_history << 1) & 2047) | (next_bit as u32) | (bit_history & 1024)
+fn updated_bit_history(bit_history: u32, next_bit: Bit) -> u32 {
+    ((bit_history << 1) & 2047) | next_bit.to_u32() | (bit_history & 1024)
 }

@@ -17,6 +17,7 @@
  */
 use std::ops;
 
+use bit::Bit;
 use super::node_child::NodeChild;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,11 +56,11 @@ impl ops::IndexMut<Direction> for [NodeChild; 2] {
     }
 }
 
-impl From<bool> for Direction {
-    fn from(bit: bool) -> Direction {
-        match bit {
-            false => Direction::Left,
-            true => Direction::Right,
+impl From<Bit> for Direction {
+    fn from(value: Bit) -> Direction {
+        match value {
+            Bit::Zero => Direction::Left,
+            Bit::One => Direction::Right,
         }
     }
 }

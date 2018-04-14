@@ -20,6 +20,7 @@ use core::hash::Hasher;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 
+use bit::Bit;
 use super::{
     HistorySource,
     ContextState,
@@ -95,7 +96,7 @@ impl HistorySource for FatMapHistorySource {
         }
     }
 
-    fn process_input_bit(&mut self, input_bit: bool) {
+    fn process_input_bit(&mut self, input_bit: Bit) {
         for order in 0..(self.max_order.min(self.input.cursor().raw()) + 1) {
             let hash = self.compute_hash(order);
             let map = &mut self.maps[(order * 8) + self.bit_index];
@@ -114,7 +115,7 @@ impl HistorySource for FatMapHistorySource {
             if !found {
                 vec.push(LocalContextState {
                     text_start: byte_index,
-                    bit_history: 2 + input_bit as u32,
+                    bit_history: 2 + input_bit.to_u32(),
                 });
             }
         }

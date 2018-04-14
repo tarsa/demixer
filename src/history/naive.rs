@@ -15,6 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+use bit::Bit;
 use super::{
     HistorySource,
     ContextState,
@@ -78,7 +79,7 @@ impl HistorySource for NaiveHistorySource {
         }
     }
 
-    fn process_input_bit(&mut self, input_bit: bool) {
+    fn process_input_bit(&mut self, input_bit: Bit) {
         self.input.set_bit_at_cursor(input_bit, self.bit_index as usize);
         self.bit_index -= 1;
     }

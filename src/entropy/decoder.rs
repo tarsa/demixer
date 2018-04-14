@@ -17,6 +17,7 @@
  */
 use std::io::Read;
 
+use bit::Bit;
 use entropy::FinalProbability;
 use fixed_point::FixedPoint;
 
@@ -43,16 +44,17 @@ impl<'a> Decoder<'a> {
         decoder
     }
 
-    pub fn decode_bit(&mut self, probability: FinalProbability) -> bool {
+    pub fn decode_bit(&mut self, probability: FinalProbability) -> Bit {
         self.normalize();
-        let rc_helper = (self.rc_range >> 12) * probability.raw() as i32;
+        let rc_helper = ((self.rc_range as i64 * probability.raw() as i64)
+            >> FinalProbability::FRACTIONAL_BITS) as i32;
         if self.rc_buffer < rc_helper {
             self.rc_range = rc_helper;
-            false
+            false.into()
         } else {
             self.rc_range -= rc_helper;
             self.rc_buffer -= rc_helper;
-            true
+            true.into()
         }
     }
 

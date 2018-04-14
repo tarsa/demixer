@@ -18,6 +18,7 @@
 extern crate demixer;
 
 use demixer::PRINT_DEBUG;
+use demixer::bit::Bit;
 use demixer::history::{
     HistorySource,
     CollectedContextStates,
@@ -85,7 +86,7 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
                        "index = {}, bit index = {}, input = {:?}",
                        index, bit_index, input);
 
-            let input_bit = (byte & (1 << bit_index)) != 0;
+            let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             if run_naive {
                 naive_source.process_input_bit(input_bit);

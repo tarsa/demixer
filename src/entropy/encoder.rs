@@ -17,6 +17,7 @@
  */
 use std::io::Write;
 
+use bit::Bit;
 use entropy::FinalProbability;
 use fixed_point::FixedPoint;
 
@@ -43,10 +44,11 @@ impl<'a> Encoder<'a> {
         }
     }
 
-    pub fn encode_bit(&mut self, probability: FinalProbability, value: bool) {
+    pub fn encode_bit(&mut self, probability: FinalProbability, value: Bit) {
         self.normalize();
-        let rc_helper = (self.rc_range >> 12) * probability.raw() as i32;
-        if value {
+        let rc_helper = ((self.rc_range as i64 * probability.raw() as i64)
+            >> FinalProbability::FRACTIONAL_BITS) as i32;
+        if value.is_1() {
             self.add_with_carry(rc_helper);
             self.rc_range -= rc_helper;
         } else {

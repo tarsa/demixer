@@ -37,7 +37,7 @@ struct Log2Type(u32);
 impl FixedPoint for Log2Type {
     type Raw = u32;
     fn raw(&self) -> u32 { self.0 }
-    fn new_raw(raw: u32) -> Self { Log2Type(raw) }
+    fn new_unchecked(raw: u32) -> Self { Log2Type(raw) }
 
     const FRACTIONAL_BITS: u8 = 30;
 }

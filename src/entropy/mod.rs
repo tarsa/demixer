@@ -15,24 +15,25 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+pub mod decoder;
+pub mod encoder;
+
+use bit::Bit;
 use fixed_point::{FixedPoint, FixI32, FixU32};
 use fixed_point::types::Log2D;
 use lut::log2::Log2Lut;
-
-pub mod decoder;
-pub mod encoder;
 
 /** Probability of bit 0 */
 #[derive(Clone)]
 pub struct FinalProbability(u32);
 
 impl FinalProbability {
-    pub fn estimate_cost(&self, is_1: bool, lut: &Log2Lut) -> Log2D {
+    pub fn estimate_cost(&self, bit: Bit, lut: &Log2Lut) -> Log2D {
         let probability =
-            if is_1 {
-                Self::new((1 << 12) - self.raw(), 12)
-            } else {
+            if bit.is_0() {
                 self.clone()
+            } else {
+                Self::new((1 << 23) - self.raw(), 23)
             };
         probability.log2(lut).neg()
     }
@@ -41,11 +42,11 @@ impl FinalProbability {
 impl FixedPoint for FinalProbability {
     type Raw = u32;
     fn raw(&self) -> u32 { self.0 }
-    fn new_raw(raw: u32) -> Self { FinalProbability(raw) }
+    fn new_unchecked(raw: u32) -> Self { FinalProbability(raw) }
     fn within_bounds(&self) -> bool {
         let raw = self.0;
         (raw > 0) && (raw < 1 << Self::FRACTIONAL_BITS)
     }
 
-    const FRACTIONAL_BITS: u8 = 12;
+    const FRACTIONAL_BITS: u8 = 23;
 }

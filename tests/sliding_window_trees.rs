@@ -18,6 +18,7 @@
 extern crate demixer;
 
 use demixer::PRINT_DEBUG;
+use demixer::bit::Bit;
 use demixer::history::{CollectedContextStates, HistorySource};
 use demixer::history::tree::{Tree, TreeHistorySource, TreeState};
 use demixer::history::tree::direction::Direction;
@@ -280,7 +281,7 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                          index, bit_index, &prefix_1[..index + 1]);
             }
 
-            let input_bit = (byte & (1 << bit_index)) != 0;
+            let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             source_1.process_input_bit(input_bit);
             if PRINT_DEBUG { println!(); }
@@ -306,7 +307,7 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                          index, bit_index, &prefix_2[..index + 1]);
             }
 
-            let input_bit = (byte & (1 << bit_index)) != 0;
+            let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             source_2.process_input_bit(input_bit);
             if PRINT_DEBUG { println!(); }
@@ -355,7 +356,7 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                          index, bit_index, &common[..index + 1]);
             }
 
-            let input_bit = (byte & (1 << bit_index)) != 0;
+            let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             if PRINT_DEBUG { println!("source 1"); }
             source_1.process_input_bit(input_bit);
@@ -434,7 +435,7 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
                 "index = {}, bit index = {}, input = {:?}",
                 index, bit_index, &common[..index + 1]);
 
-            let input_bit = (byte & (1 << bit_index)) != 0;
+            let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             if PRINT_DEBUG { println!("source 1"); }
             source_1.process_input_bit(input_bit);

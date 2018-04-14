@@ -17,8 +17,10 @@
  */
 use std::{fmt, ops};
 
-pub fn get_bit(byte: u8, bit_index: usize) -> bool {
-    ((byte >> bit_index) & 1) == 1
+use bit::Bit;
+
+pub fn get_bit(byte: u8, bit_index: usize) -> Bit {
+    (((byte >> bit_index) & 1) == 1).into()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -243,13 +245,14 @@ impl InputWindow {
                            second_byte_index: WindowIndex,
                            bit_index: usize) -> bool {
         get_bit(self[first_byte_index] ^ self[second_byte_index], bit_index)
+            .is_1()
     }
 
-    pub fn get_bit(&self, byte_index: WindowIndex, bit_index: usize) -> bool {
+    pub fn get_bit(&self, byte_index: WindowIndex, bit_index: usize) -> Bit {
         get_bit(self[byte_index], bit_index)
     }
 
-    pub fn set_bit_at_cursor(&mut self, bit_value: bool, bit_index: usize) {
+    pub fn set_bit_at_cursor(&mut self, bit_value: Bit, bit_index: usize) {
         self.buffer[self.cursor.raw()] &= !(1 << bit_index);
         self.buffer[self.cursor.raw()] |= (bit_value as u8) << bit_index;
     }
