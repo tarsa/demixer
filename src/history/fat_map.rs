@@ -21,28 +21,23 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 
 use bit::Bit;
+use lut::LookUpTables;
 use super::{
     HistorySource,
     ContextState,
     CollectedContextStates,
-    updated_bit_history,
 };
-use super::window::{InputWindow, WindowIndex};
+use super::window::InputWindow;
 
-#[derive(Clone)]
-struct LocalContextState {
-    text_start: WindowIndex,
-    bit_history: u32,
-}
-
-pub struct FatMapHistorySource {
+pub struct FatMapHistorySource<'a> {
+    luts: &'a LookUpTables,
     input: InputWindow,
     bit_index: usize,
     max_order: usize,
-    maps: Vec<HashMap<u64, Vec<LocalContextState>>>,
+    maps: Vec<HashMap<u64, Vec<ContextState>>>,
 }
 
-impl FatMapHistorySource {
+impl<'a> FatMapHistorySource<'a> {
     fn compute_hash(&self, order: usize) -> u64 {
         let input = &self.input;
         let map = &self.maps[(order * 8) + self.bit_index];
@@ -57,9 +52,11 @@ impl FatMapHistorySource {
     }
 }
 
-impl HistorySource for FatMapHistorySource {
-    fn new(max_window_size: usize, max_order: usize) -> FatMapHistorySource {
+impl<'a> HistorySource<'a> for FatMapHistorySource<'a> {
+    fn new(max_window_size: usize, max_order: usize, luts: &'a LookUpTables)
+           -> FatMapHistorySource {
         FatMapHistorySource {
+            luts,
             input: InputWindow::new(max_window_size, 0),
             bit_index: 7,
             max_order,
@@ -84,13 +81,9 @@ impl HistorySource for FatMapHistorySource {
                 flat_map(|vec| vec.into_iter().find(|item| {
                     self.input.compare_for_equal_prefix(
                         self.input.index_subtract(self.input.cursor(), order),
-                        item.text_start, self.bit_index, order)
+                        item.last_occurrence_index(), self.bit_index, order)
                 })).last() {
-                Some(ctx) =>
-                    bit_histories.items.push(ContextState {
-                        last_occurrence_index: ctx.text_start,
-                        bit_history: ctx.bit_history,
-                    }),
+                Some(ctx) => bit_histories.items.push(ctx.clone()),
                 None => { break; }
             }
         }
@@ -104,19 +97,14 @@ impl HistorySource for FatMapHistorySource {
             let input = &self.input;
             let byte_index = input.index_subtract(input.cursor(), order);
             let bit_index = self.bit_index;
-            let found = vec.iter_mut().find(|item|
-                input.compare_for_equal_prefix(
-                    byte_index, item.text_start, bit_index, order)
-            ).map(|ctx| {
-                ctx.text_start = byte_index;
-                ctx.bit_history =
-                    updated_bit_history(ctx.bit_history, input_bit);
-            }).is_some();
+            let luts = self.luts;
+            let found = vec.iter_mut()
+                .find(|item| input.compare_for_equal_prefix(
+                    byte_index, item.last_occurrence_index(), bit_index, order))
+                .map(|ctx| *ctx = ctx.next_state(byte_index, input_bit, luts))
+                .is_some();
             if !found {
-                vec.push(LocalContextState {
-                    text_start: byte_index,
-                    bit_history: 2 + input_bit.to_u32(),
-                });
+                vec.push(ContextState::starting_state(byte_index, input_bit));
             }
         }
         self.input.set_bit_at_cursor(input_bit, self.bit_index);

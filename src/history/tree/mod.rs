@@ -23,6 +23,8 @@ pub mod nodes;
 
 use PRINT_DEBUG;
 use bit::Bit;
+use estimators::decelerating::DeceleratingEstimator;
+use lut::LookUpTables;
 use super::{
     CollectedContextStates, ContextState, HistorySource,
     make_bit_run_history, updated_bit_history,
@@ -34,20 +36,21 @@ use self::node::Node;
 use self::node_child::NodeChild;
 use self::nodes::{NodeIndex, Nodes};
 
-pub struct TreeHistorySource {
-    pub tree: Tree,
+pub struct TreeHistorySource<'a> {
+    pub tree: Tree<'a>,
     pub active_contexts: ActiveContexts,
     pub bit_index: i32,
 }
 
-impl TreeHistorySource {
+impl<'a> TreeHistorySource<'a> {
     pub fn new_special(max_window_size: usize, max_order: usize,
-                       initial_shift: usize) -> TreeHistorySource {
+                       initial_shift: usize, luts: &'a LookUpTables)
+                       -> TreeHistorySource<'a> {
         assert!(max_window_size > 0);
         assert!(initial_shift < max_window_size);
         let nodes = Nodes::new(Nodes::NUM_ROOTS.max(max_window_size - 1));
         TreeHistorySource {
-            tree: Tree::new(nodes, max_window_size, initial_shift, 0),
+            tree: Tree::new(nodes, max_window_size, initial_shift, 0, luts),
             active_contexts: ActiveContexts::new(max_order),
             bit_index: -1,
         }
@@ -61,9 +64,10 @@ impl TreeHistorySource {
     }
 }
 
-impl HistorySource for TreeHistorySource {
-    fn new(max_window_size: usize, max_order: usize) -> TreeHistorySource {
-        TreeHistorySource::new_special(max_window_size, max_order, 0)
+impl<'a> HistorySource<'a> for TreeHistorySource<'a> {
+    fn new(max_window_size: usize, max_order: usize, luts: &'a LookUpTables)
+           -> TreeHistorySource<'a> {
+        TreeHistorySource::new_special(max_window_size, max_order, 0, luts)
     }
 
     fn start_new_byte(&mut self) {
@@ -97,14 +101,15 @@ pub enum TreeState {
     Degenerate,
 }
 
-pub struct Tree {
+pub struct Tree<'a> {
+    luts: &'a LookUpTables,
     nodes: Nodes,
     pub window: InputWindow,
     tree_state: TreeState,
     root_index: usize,
 }
 
-impl Tree {
+impl<'a> Tree<'a> {
     pub fn tree_state(&self) -> TreeState {
         self.tree_state
     }
@@ -387,8 +392,9 @@ impl Tree {
     }
 
     pub fn new(nodes: Nodes, max_window_size: usize, initial_shift: usize,
-               root_index: usize) -> Tree {
+               root_index: usize, luts: &LookUpTables) -> Tree {
         Tree {
+            luts,
             nodes,
             window: InputWindow::new(max_window_size, initial_shift),
             tree_state: TreeState::Degenerate,
@@ -418,25 +424,25 @@ impl Tree {
                     assert!(self.window.index_is_smaller(
                         last_occurrence_index, self.window.index_subtract(
                             self.window.cursor(), order)));
-                    let bit_history =
-                        if node.depth() == order * 8 + 7 - bit_index {
-                            node.history_state()
-                        } else {
-                            assert_ne!(context.incoming_edge_visits_count, -1);
+                    if node.depth() == order * 8 + 7 - bit_index {
+                        collected_states.items.push(ContextState::ForNode {
+                            last_occurrence_index,
+                            probability_estimator: node.probability_estimator(),
+                            bit_history: node.history_state(),
+                        });
+                    } else {
+                        assert_ne!(context.incoming_edge_visits_count, -1);
+                        if context.incoming_edge_visits_count > 0 {
                             let repeated_bit = self.window.get_bit(
                                 self.window.index_add(
                                     last_occurrence_index, order), bit_index);
-                            make_bit_run_history(
-                                context.incoming_edge_visits_count as usize,
-                                repeated_bit)
-                        };
-                    if bit_history != 1 {
-                        collected_states.items.push(ContextState {
-                            last_occurrence_index,
-                            bit_history,
-                        });
-                    } else {
-                        assert_eq!(context.incoming_edge_visits_count, 0);
+                            collected_states.items.push(ContextState::ForEdge {
+                                last_occurrence_index,
+                                repeated_bit,
+                                occurrence_count:
+                                context.incoming_edge_visits_count as u16,
+                            });
+                        }
                     }
                 }
             }
@@ -445,13 +451,14 @@ impl Tree {
                 let count = (active_contexts.max_order() + 1)
                     .min(self.window.size() - 1);
                 for order in 0..count {
-                    collected_states.items.push(ContextState {
+                    collected_states.items.push(ContextState::ForEdge {
                         last_occurrence_index: self.window.index_subtract(
                             self.window.cursor(), order + 1),
-                        bit_history: make_bit_run_history(
-                            self.window.size() - order - 1,
-                            self.window.get_bit(self.window.start(),
-                                                bit_index)),
+                        occurrence_count:
+                        (ContextState::MAX_OCCURRENCE_COUNT as usize)
+                            .min(self.window.size() - order - 1) as u16,
+                        repeated_bit: self.window.get_bit(
+                            self.window.start(), bit_index),
                     });
                 }
             }
@@ -482,7 +489,8 @@ impl Tree {
                     if self.nodes()[node_index].depth()
                         == order * 8 + 7 - bit_index {
                         assert!(!context.in_leaf);
-                        context.descend(self, order, bit_index);
+                        context.descend(self, order, bit_index,
+                                        self.luts.d_estimator_lut());
                         if PRINT_DEBUG { self.print(); }
                     } else if self.window.bytes_differ_on(
                         self.window.index_add(context.suffix_index, order),
@@ -492,7 +500,7 @@ impl Tree {
                             context.in_leaf || self.nodes()[node_index].depth()
                                 >= order * 8,
                             "order = {}, context = {}", order, context);
-                        self.split_edge(&context, order, bit_index);
+                        self.split_edge(&context, order, bit_index, self.luts);
                         if PRINT_DEBUG { self.print(); }
                         assert_eq!(count - 1, order);
                         count = order;
@@ -507,7 +515,8 @@ impl Tree {
                     self.window.cursor(), bit_index,
                 ) {
                     let order = max_order.min(self.window.size() - 2);
-                    self.split_degenerate_root_edge(order, bit_index);
+                    self.split_degenerate_root_edge(order, bit_index,
+                                                    self.luts);
                     self.tree_state = TreeState::Proper;
                     if PRINT_DEBUG { self.print(); }
                 }
@@ -520,7 +529,7 @@ impl Tree {
     }
 
     fn split_edge(&mut self, context: &Context, context_order: usize,
-                  bit_index: usize) {
+                  bit_index: usize, luts: &LookUpTables) {
         let direction: Direction =
             self.window.get_bit(self.window.cursor(), bit_index).into();
         let node_index = context.node_index;
@@ -531,7 +540,7 @@ impl Tree {
             let mut new_node = self.nodes[node_index].clone();
             if PRINT_DEBUG { print!(", node = {}", new_node); }
             let mut node = self.setup_split_edge(
-                context, context_order, bit_index, new_node.text_start());
+                context, context_order, bit_index, new_node.text_start(), luts);
             new_node.text_start = context.suffix_index.raw() as u32;
             node.children[direction] = self.window.index_subtract(
                 self.window.cursor(), context_order).into();
@@ -548,7 +557,7 @@ impl Tree {
             let mut new_node = self.setup_split_edge(
                 context, context_order, bit_index,
                 node.children[context.direction_from_parent.unwrap()]
-                    .to_window_index());
+                    .to_window_index(), luts);
             new_node.children[direction] = self.window.index_subtract(
                 self.window.cursor(), context_order).into();
             new_node.children[!direction] = context.suffix_index.into();
@@ -562,15 +571,22 @@ impl Tree {
     }
 
     fn setup_split_edge(&self, context: &Context, context_order: usize,
-                        bit_index: usize, text_start: WindowIndex) -> Node {
+                        bit_index: usize, text_start: WindowIndex,
+                        luts: &LookUpTables) -> Node {
         assert_ne!(context.incoming_edge_visits_count, -1);
         let incoming_edge_visits_count =
-            context.incoming_edge_visits_count as usize;
+            context.incoming_edge_visits_count as u16;
         let bit = self.window.get_bit(self.window.cursor(), bit_index);
         let direction: Direction = bit.into();
+        let mut probability_estimator = luts.d_estimator_cache()
+            .for_bit_run(!bit,
+                         DeceleratingEstimator::MAX_LENGTH
+                             .min(incoming_edge_visits_count));
+        probability_estimator.update(bit, luts.d_estimator_lut());
         let bit_history = updated_bit_history(make_bit_run_history(
             incoming_edge_visits_count, !bit), bit);
         Node::new(text_start,
+                  probability_estimator,
                   context_order * 8 + 7 - bit_index,
                   direction.fold(|| 1, || incoming_edge_visits_count),
                   direction.fold(|| incoming_edge_visits_count, || 1),
@@ -579,7 +595,7 @@ impl Tree {
     }
 
     fn split_degenerate_root_edge(&mut self, context_order: usize,
-                                  bit_index: usize) {
+                                  bit_index: usize, luts: &LookUpTables) {
         if PRINT_DEBUG {
             println!("SPLIT: Splitting degenerate root edge, order = {}",
                      context_order);
@@ -597,12 +613,21 @@ impl Tree {
                 direction.fold(|| branching_child, || chained_child),
                 direction.fold(|| chained_child, || branching_child),
             ];
-            let bit_history = updated_bit_history(make_bit_run_history(
-                self.window.size() - current_context_order - 1, !bit), bit);
-            let repeated_edge_count = 63.min(
-                self.window.index_diff(suffix_start, self.window.start()));
+            let mut probability_estimator = luts.d_estimator_cache()
+                .for_bit_run(
+                    !bit, (DeceleratingEstimator::MAX_LENGTH as usize)
+                        .min(self.window.size() - current_context_order - 1)
+                        as u16);
+            probability_estimator.update(bit, luts.d_estimator_lut());
+            let bit_history = updated_bit_history(
+                make_bit_run_history((self.window.size() - current_context_order
+                    - 1) as u16, !bit), bit);
+            let repeated_edge_count =
+                self.window.index_diff(suffix_start, self.window.start()).min(
+                    ContextState::MAX_OCCURRENCE_COUNT as usize) as u16;
             let node = Node::new(
                 suffix_start,
+                probability_estimator,
                 current_context_order * 8 + 7 - bit_index,
                 direction.fold(|| 1, || repeated_edge_count),
                 direction.fold(|| repeated_edge_count, || 1),

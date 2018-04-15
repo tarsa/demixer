@@ -26,6 +26,7 @@ use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
 use demixer::history::tree::TreeHistorySource;
 use demixer::history::window::get_bit;
+use demixer::lut::LookUpTables;
 
 fn main() {
     print_banner();
@@ -40,13 +41,14 @@ fn main() {
     file.read_to_end(&mut buffer).unwrap();
     std::mem::drop(file);
 
+    let luts = LookUpTables::new();
     match history_source_type {
         "brute_force" =>
-            print_bit_histories::<NaiveHistorySource>(&buffer),
+            print_bit_histories::<NaiveHistorySource>(&buffer, &luts),
         "fat_map" =>
-            print_bit_histories::<FatMapHistorySource>(&buffer),
+            print_bit_histories::<FatMapHistorySource>(&buffer, &luts),
         "tree" =>
-            print_bit_histories::<TreeHistorySource>(&buffer),
+            print_bit_histories::<TreeHistorySource>(&buffer, &luts),
         _ =>
             panic!("unrecognized history source type!")
     }
@@ -59,9 +61,10 @@ fn print_banner() {
     eprintln!();
 }
 
-fn print_bit_histories<Source: HistorySource>(input: &[u8]) {
+fn print_bit_histories<'a, Source: HistorySource<'a>>(input: &[u8],
+                                                      luts: &'a LookUpTables) {
     let mut collected_states = CollectedContextStates::new(MAX_ORDER);
-    let mut history_source = Source::new(input.len(), MAX_ORDER);
+    let mut history_source = Source::new(input.len(), MAX_ORDER, &luts);
     for (i, &x) in input.iter().take(1234).enumerate() {
         println!("Processing byte with index: {}, {}", i, x as char);
         history_source.start_new_byte();
@@ -70,10 +73,10 @@ fn print_bit_histories<Source: HistorySource>(input: &[u8]) {
             history_source.gather_history_states(&mut collected_states);
             if collected_states.items().len() > 0 {
                 print!("{}: ", bit_index);
-                print!("{:x}", collected_states.items()[0].bit_history);
+                print!("{:x}", collected_states.items()[0].bit_history());
                 for i in 1..collected_states.items().len() {
                     print!(", ");
-                    print!("{:x}", collected_states.items()[i].bit_history);
+                    print!("{:x}", collected_states.items()[i].bit_history());
                 }
                 println!();
             }

@@ -16,23 +16,26 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use bit::Bit;
+use lut::LookUpTables;
 use super::{
     HistorySource,
     ContextState,
     CollectedContextStates,
-    updated_bit_history,
 };
 use super::window::{InputWindow, WindowIndex};
 
-pub struct NaiveHistorySource {
+pub struct NaiveHistorySource<'a> {
+    luts: &'a LookUpTables,
     input: InputWindow,
     bit_index: i32,
     max_order: usize,
 }
 
-impl HistorySource for NaiveHistorySource {
-    fn new(max_window_size: usize, max_order: usize) -> NaiveHistorySource {
+impl<'a> HistorySource<'a> for NaiveHistorySource<'a> {
+    fn new(max_window_size: usize, max_order: usize, luts: &'a LookUpTables)
+           -> NaiveHistorySource {
         NaiveHistorySource {
+            luts,
             input: InputWindow::new(max_window_size, 0),
             bit_index: -1,
             max_order,
@@ -50,8 +53,7 @@ impl HistorySource for NaiveHistorySource {
     fn gather_history_states(&self,
                              bit_histories: &mut CollectedContextStates) {
         for order in 0..(self.max_order + 1) {
-            let mut last_occurrence_index_opt = None;
-            let mut bit_history = 1;
+            let mut last_context_state_opt: Option<ContextState> = None;
             let stop_search_position =
                 self.input.index_subtract(self.input.cursor(), order).raw();
             for scanned_index in 0..stop_search_position {
@@ -62,17 +64,23 @@ impl HistorySource for NaiveHistorySource {
                     self.bit_index as usize, order,
                 );
                 if prefix_equal {
-                    last_occurrence_index_opt = Some(scanned_index);
-                    let next_bit = self.input.get_bit(
+                    let bit_in_context = self.input.get_bit(
                         self.input.index_add(scanned_index, order),
                         self.bit_index as usize);
-                    bit_history = updated_bit_history(bit_history, next_bit);
+                    let new_context_state = {
+                        if let Some(context_state) = last_context_state_opt {
+                            context_state.next_state(
+                                scanned_index, bit_in_context, self.luts)
+                        } else {
+                            ContextState::starting_state(
+                                scanned_index, bit_in_context)
+                        }
+                    };
+                    last_context_state_opt = Some(new_context_state);
                 }
             }
-            assert_eq!(last_occurrence_index_opt == None, bit_history == 1);
-            if let Some(last_occurrence_index) = last_occurrence_index_opt {
-                bit_histories.items.push(
-                    ContextState { last_occurrence_index, bit_history });
+            if let Some(context_state) = last_context_state_opt {
+                bit_histories.items.push(context_state);
             } else {
                 break;
             }

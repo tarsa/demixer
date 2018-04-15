@@ -22,9 +22,11 @@ use demixer::bit::Bit;
 use demixer::history::{CollectedContextStates, HistorySource};
 use demixer::history::tree::{Tree, TreeHistorySource, TreeState};
 use demixer::history::tree::direction::Direction;
+use demixer::lut::LookUpTables;
 
 #[test]
 fn compare_for_repeated_byte_input() {
+    let luts = LookUpTables::new();
     let lengths_of_inputs_and_prefixes = vec![
         (0, 7, 13),
         (2, 0, 13),
@@ -42,7 +44,7 @@ fn compare_for_repeated_byte_input() {
                 for &max_order in [0, 1, 2, 3, 4, 7, 20, 40, 100]
                     .iter().take_while(|&&order| order < max_window_size) {
                     compare_for_input(&prefix_1, &prefix_2, &common_input,
-                                      max_window_size, max_order);
+                                      max_window_size, max_order, &luts);
                 }
             }
         }
@@ -51,6 +53,7 @@ fn compare_for_repeated_byte_input() {
 
 #[test]
 fn compare_for_two_symbols_interrupted_runs() {
+    let luts = LookUpTables::new();
     let symbols_pairs: &[(u8, u8)] =
         &[(0, 255), ('b' as u8, 'a' as u8), (215, 15), (31, 32)];
     let lengths_of_inputs_and_prefixes = vec![
@@ -77,7 +80,7 @@ fn compare_for_two_symbols_interrupted_runs() {
                     for &max_order in [0, 1, 2, 3, 4, 7, 20, 40, 100]
                         .iter().take_while(|&&order| order < max_window_size) {
                         compare_for_input(prefix_1, prefix_2, common_input,
-                                          max_window_size, max_order);
+                                          max_window_size, max_order, &luts);
                     }
                 }
             }
@@ -87,6 +90,7 @@ fn compare_for_two_symbols_interrupted_runs() {
 
 #[test]
 fn compare_for_two_symbols_fibonacci_word() {
+    let luts = LookUpTables::new();
     let symbols_pairs: &[(u8, u8)] =
         &[(0, 255), ('b' as u8, 'a' as u8), (215, 15), (31, 32)];
     let lengths_of_inputs_and_prefixes = vec![
@@ -113,7 +117,7 @@ fn compare_for_two_symbols_fibonacci_word() {
                 for &max_order in [0, 1, 2, 3, 4, 7, 20, 40, 100]
                     .iter().take_while(|&&order| order < max_window_size) {
                     compare_for_input(prefix_1, prefix_2, common_input,
-                                      max_window_size, max_order);
+                                      max_window_size, max_order, &luts);
                 }
             }
         }
@@ -122,6 +126,7 @@ fn compare_for_two_symbols_fibonacci_word() {
 
 #[test]
 fn compare_for_multi_symbol_sequences() {
+    let luts = LookUpTables::new();
     let lengths_of_inputs_and_prefixes = vec![
         (0, 7, 13),
         (2, 0, 13),
@@ -147,7 +152,7 @@ fn compare_for_multi_symbol_sequences() {
                 for &max_order in [0, 1, 2, 3, 4, 7, 20, 40, 100]
                     .iter().take_while(|&&order| order < max_window_size) {
                     compare_for_input(prefix_1, prefix_2, common_input,
-                                      max_window_size, max_order);
+                                      max_window_size, max_order, &luts);
                 }
             }
         }
@@ -156,6 +161,7 @@ fn compare_for_multi_symbol_sequences() {
 
 #[test]
 fn compare_for_repeated_byte_borders() {
+    let luts = LookUpTables::new();
     let lengths_of_prefixes_and_suffixes = vec![
         (1, 7, 13),
         (2, 1, 13),
@@ -185,7 +191,7 @@ fn compare_for_repeated_byte_borders() {
                 for &max_order in [0, 1, 2, 3, 4, 7, 20, 40, 100]
                     .iter().take_while(|&&order| order < max_window_size) {
                     compare_for_input(&prefix_1, &prefix_2, &common_input,
-                                      max_window_size, max_order);
+                                      max_window_size, max_order, &luts);
                 }
             }
         }
@@ -195,6 +201,7 @@ fn compare_for_repeated_byte_borders() {
 
 #[test]
 fn compare_for_repeated_pattern_borders() {
+    let luts = LookUpTables::new();
     let lengths_of_prefixes_and_suffixes = vec![
         (1, 7, 13),
         (2, 1, 13),
@@ -232,7 +239,7 @@ fn compare_for_repeated_pattern_borders() {
                     for &max_order in [0, 1, 2, 3, 4, 7, 20, 40, 100]
                         .iter().take_while(|&&order| order < max_window_size) {
                         compare_for_input(&prefix_1, &prefix_2, &common_input,
-                                          max_window_size, max_order);
+                                          max_window_size, max_order, &luts);
                     }
                 }
             }
@@ -242,7 +249,8 @@ fn compare_for_repeated_pattern_borders() {
 }
 
 fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
-                     max_window_size: usize, max_order: usize) {
+                     max_window_size: usize, max_order: usize,
+                     luts: &LookUpTables) {
     assert!(max_order < max_window_size);
 
     let offset_1 = prefix_1.len() % max_window_size;
@@ -258,8 +266,10 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
             "convergence can only be checked after \
              windows' contents are identical");
 
-    let mut source_1 = TreeHistorySource::new(max_window_size, max_order);
-    let mut source_2 = TreeHistorySource::new(max_window_size, max_order);
+    let mut source_1 =
+        TreeHistorySource::new(max_window_size, max_order, &luts);
+    let mut source_2 =
+        TreeHistorySource::new(max_window_size, max_order, &luts);
     let mut source_1_results = CollectedContextStates::new(max_order);
     let mut source_2_results = CollectedContextStates::new(max_order);
 
@@ -426,11 +436,11 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
             assert_eq!(
                 source_1_results.items().iter().map(
                     |ctx_state| source_1.tree.window.index_subtract(
-                        ctx_state.last_occurrence_index, offset_1)
+                        ctx_state.last_occurrence_index(), offset_1)
                 ).collect::<Vec<_>>(),
                 source_2_results.items().iter().map(
                     |ctx_state| source_2.tree.window.index_subtract(
-                        ctx_state.last_occurrence_index, offset_2))
+                        ctx_state.last_occurrence_index(), offset_2))
                     .collect::<Vec<_>>(),
                 "index = {}, bit index = {}, input = {:?}",
                 index, bit_index, &common[..index + 1]);

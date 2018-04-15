@@ -18,7 +18,7 @@
 extern crate core;
 
 pub mod bit;
-pub mod entropy;
+pub mod coding;
 pub mod estimators;
 pub mod fixed_point;
 pub mod history;

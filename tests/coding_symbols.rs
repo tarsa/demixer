@@ -20,12 +20,12 @@ extern crate demixer;
 use std::io::{Read, Write};
 
 use demixer::bit::Bit;
-use demixer::entropy::FinalProbability;
-use demixer::entropy::decoder::Decoder;
-use demixer::entropy::encoder::Encoder;
+use demixer::coding::FinalProbability;
+use demixer::coding::decoder::Decoder;
+use demixer::coding::encoder::Encoder;
 use demixer::fixed_point::*;
 use demixer::fixed_point::types::Log2Q;
-use demixer::lut::log2::{Log2Lut, make_log2_lut};
+use demixer::lut::log2::Log2Lut;
 use demixer::random::MersenneTwister;
 
 enum CodingEvent {
@@ -58,7 +58,7 @@ fn coding_is_reversible_for_multiple_events() {
 #[test]
 fn coding_can_be_estimated() {
     let mut prng = MersenneTwister::new_by_scalar_seed(1500100900);
-    let lut = make_log2_lut();
+    let lut = Log2Lut::new();
     for &length in [0, 1, 2, 3, 4, 5, 10, 20, 30, 80, 200, 1000, 8000].iter() {
         for _ in 0..5 {
             let events = generate_events(&mut prng, length, true);

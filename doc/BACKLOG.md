@@ -3,12 +3,8 @@
 - add missing unit tests
   - InputWindow is missing ones
 - improve test infrastructure
-  - Rust's release mode disables numeric overflow and underflow checking
-    - don't disable them in tests
   - split test into multiple categories to save time on developing isolated
     features
-- add stationary counters to tree nodes (i.e. to the explicit, branching ones)
-- split history module into history::source and history::state modules
 - add support for different sizes of nodes pool and input window in tree based
   history source
   - keep in mind that next bit can potentially result in all active contexts
@@ -27,6 +23,7 @@
   - another narrow bit history can be still skewed towards long runs but having
     smaller size (eg 8 bit) would be faster to adapt to (using stationary
     counters)
+  - split history module into history::source and history::state modules
 - implement multi-threading which will be used for encoder
   - thread based, without work stealing
     - every thread has a set of its responsibilities

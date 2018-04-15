@@ -21,38 +21,56 @@ mod compare_history_sources;
 
 use compare_history_sources::compare_for_input;
 use demixer::MAX_ORDER;
+use demixer::history::ContextState;
+use demixer::lut::LookUpTables;
 
 #[test]
 #[cfg(not(feature = "long_tests"))]
 #[ignore]
 fn long_tests_skipped() {
     // silencing dead code and unused imports warnings
-    compare_for_input(&[], 0, false);
+    let luts = LookUpTables::new();
+    compare_for_input(&[], 0, false, &luts);
     assert_eq!(MAX_ORDER, 0);
 }
 
 #[test]
 #[cfg(feature = "long_tests")]
 fn compare_for_one_byte_input() {
+    let luts = LookUpTables::new();
     for max_order in 0..MAX_ORDER + 1 {
         for byte in 0..255 {
-            compare_for_input(&[byte], max_order, true);
+            compare_for_input(&[byte], max_order, true, &luts);
         }
-        compare_for_input(&[255], max_order, true);
+        compare_for_input(&[255], max_order, true, &luts);
     }
 }
 
 #[test]
 #[cfg(feature = "long_tests")]
+fn compare_for_high_repetition_count() {
+    let luts = LookUpTables::new();
+    let mut input = vec![1u8; ContextState::MAX_OCCURRENCE_COUNT as usize + 5];
+    input.push(0);
+    input.append(&mut vec![1; 5]);
+    compare_for_input(&input, 3, true, &luts);
+}
+
+
+#[test]
+#[cfg(feature = "long_tests")]
 fn compare_for_repeated_byte_input() {
+    let luts = LookUpTables::new();
     for max_order in 0..MAX_ORDER + 1 {
-        compare_for_input(&[0xb5 + max_order as u8; 80], max_order, false);
+        compare_for_input(&[0xb5 + max_order as u8; 80], max_order, false,
+                          &luts);
     }
 }
 
 #[test]
 #[cfg(feature = "long_tests")]
 fn compare_for_two_symbols_sequences() {
+    let luts = LookUpTables::new();
     let symbols_pairs: &[(u8, u8)] =
         &[(0, 255), ('b' as u8, 'a' as u8), (215, 15), (31, 32)];
     for &(sym_0, sym_1) in symbols_pairs.iter() {
@@ -66,7 +84,7 @@ fn compare_for_two_symbols_sequences() {
                     input1.append(&mut input0.clone());
                 }
                 for &max_order in [0, 1, 2, 3, 7, 20, 40, MAX_ORDER].iter() {
-                    compare_for_input(&input1, max_order, false);
+                    compare_for_input(&input1, max_order, false, &luts);
                 }
             }
         }
@@ -80,7 +98,7 @@ fn compare_for_two_symbols_sequences() {
                 word0 = old_word1;
             }
             for &max_order in [0, 1, 2, 3, 7, 20, 40, MAX_ORDER].iter() {
-                compare_for_input(&word1, max_order, false);
+                compare_for_input(&word1, max_order, false, &luts);
             }
         }
     }
@@ -89,6 +107,7 @@ fn compare_for_two_symbols_sequences() {
 #[test]
 #[cfg(feature = "long_tests")]
 fn compare_for_multi_symbol_sequences() {
+    let luts = LookUpTables::new();
     for &starting_symbol in [0 as u8, 'a' as u8].iter() {
         let mut word = vec![starting_symbol];
         let mut next_symbol = starting_symbol + 1;
@@ -99,7 +118,7 @@ fn compare_for_multi_symbol_sequences() {
             next_symbol += 1;
         }
         for &max_order in [0, 1, 2, 3, 7, 20, 40, MAX_ORDER].iter() {
-            compare_for_input(&word, max_order, false);
+            compare_for_input(&word, max_order, false, &luts);
         }
     }
 }
@@ -107,6 +126,7 @@ fn compare_for_multi_symbol_sequences() {
 #[test]
 #[cfg(feature = "long_tests")]
 fn compare_for_repeated_byte_borders() {
+    let luts = LookUpTables::new();
     let border_and_middle_starter_symbols: &[(u8, u8)] =
         &[(0, 128), ('z' as u8, 'a' as u8), (215, 15), (31, 32)];
     for &(border_sym, middle_sym) in border_and_middle_starter_symbols.iter() {
@@ -124,7 +144,7 @@ fn compare_for_repeated_byte_borders() {
                     let mut word = vec![border_sym; left_border_length];
                     word.append(&mut middle.clone());
                     word.append(&mut vec![border_sym; right_border_length]);
-                    compare_for_input(&word, max_order, false);
+                    compare_for_input(&word, max_order, false, &luts);
                 }
             }
         }
@@ -135,6 +155,7 @@ fn compare_for_repeated_byte_borders() {
 #[test]
 #[cfg(feature = "long_tests")]
 fn compare_for_repeated_pattern_borders() {
+    let luts = LookUpTables::new();
     let border_and_middle_starter_symbols: &[(u8, u8, u8)] =
         &[(0, 255, 128), ('z' as u8, 'v' as u8, 'a' as u8), (31, 32, 215)];
     for &(border_sym_0, border_sym_1, middle_sym)
@@ -161,7 +182,7 @@ fn compare_for_repeated_pattern_borders() {
                         word.extend_from_slice(&border[..left_border_length]);
                         word.append(&mut middle.clone());
                         word.extend_from_slice(&border[..right_border_length]);
-                        compare_for_input(&word, max_order, false);
+                        compare_for_input(&word, max_order, false, &luts);
                     }
                 }
             }

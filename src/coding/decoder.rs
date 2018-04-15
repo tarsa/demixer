@@ -18,8 +18,9 @@
 use std::io::Read;
 
 use bit::Bit;
-use entropy::FinalProbability;
 use fixed_point::FixedPoint;
+
+use super::FinalProbability;
 
 pub struct Decoder<'a> {
     reader: &'a mut Read,

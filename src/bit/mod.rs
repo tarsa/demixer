@@ -18,6 +18,8 @@
 use std::fmt;
 use std::ops::Not;
 
+use history::tree::direction::Direction;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Bit { Zero = 0, One = 1 }
 
@@ -25,6 +27,10 @@ impl Bit {
     pub fn is_0(&self) -> bool { *self == Bit::Zero }
     pub fn is_1(&self) -> bool { *self == Bit::One }
 
+    pub fn to_i8(&self) -> i8 { *self as i8 }
+    pub fn to_u8(&self) -> u8 { *self as u8 }
+    pub fn to_i16(&self) -> i16 { *self as i16 }
+    pub fn to_u16(&self) -> u16 { *self as u16 }
     pub fn to_i32(&self) -> i32 { *self as i32 }
     pub fn to_u32(&self) -> u32 { *self as u32 }
     pub fn to_i64(&self) -> i64 { *self as i64 }
@@ -33,13 +39,22 @@ impl Bit {
 
 impl fmt::Display for Bit {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_i32())
+        write!(f, "{}", self.to_i8())
     }
 }
 
 impl From<bool> for Bit {
     fn from(value: bool) -> Self {
         if value { Bit::One } else { Bit::Zero }
+    }
+}
+
+impl From<Direction> for Bit {
+    fn from(value: Direction) -> Self {
+        match value {
+            Direction::Left => Bit::Zero,
+            Direction::Right => Bit::One,
+        }
     }
 }
 

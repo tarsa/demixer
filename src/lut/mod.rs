@@ -15,4 +15,39 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+pub mod estimator;
 pub mod log2;
+
+use self::estimator::*;
+use self::log2::Log2Lut;
+
+pub struct LookUpTables {
+    log2_lut: Log2Lut,
+    d_estimator_lut: DeceleratingEstimatorLut,
+    d_estimator_cache: DeceleratingEstimatorCache,
+}
+
+impl LookUpTables {
+    pub fn new() -> LookUpTables {
+        let d_estimator_lut = DeceleratingEstimatorLut::make_default();
+        let d_estimator_cache =
+            DeceleratingEstimatorCache::new(&d_estimator_lut);
+        LookUpTables {
+            log2_lut: Log2Lut::new(),
+            d_estimator_lut,
+            d_estimator_cache,
+        }
+    }
+
+    pub fn log2_lut(&self) -> &Log2Lut {
+        &self.log2_lut
+    }
+
+    pub fn d_estimator_lut(&self) -> &DeceleratingEstimatorLut {
+        &self.d_estimator_lut
+    }
+
+    pub fn d_estimator_cache(&self) -> &DeceleratingEstimatorCache {
+        &self.d_estimator_cache
+    }
+}

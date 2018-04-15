@@ -27,12 +27,16 @@ use demixer::history::{
 use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
 use demixer::history::tree::TreeHistorySource;
+use demixer::lut::LookUpTables;
 
-pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
-    let mut naive_source = NaiveHistorySource::new(input.len(), max_order);
-    let mut fat_map_source = FatMapHistorySource::new(input.len(), max_order);
+pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool,
+                         luts: &LookUpTables) {
+    let mut naive_source =
+        NaiveHistorySource::new(input.len(), max_order, luts);
+    let mut fat_map_source =
+        FatMapHistorySource::new(input.len(), max_order, luts);
     let mut tree_source = TreeHistorySource::new_special(
-        input.len(), max_order, input.len() / 2);
+        input.len(), max_order, input.len() / 2, luts);
 
     let mut naive_source_results = CollectedContextStates::new(max_order);
     let mut fat_map_source_results = CollectedContextStates::new(max_order);
@@ -75,12 +79,25 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool) {
             }
             assert_eq!(fat_map_source_results.items(),
                        &tree_source_results.items().iter().map(|ctx_state| {
-                           ContextState {
-                               last_occurrence_index: tree_source.tree.window
-                                   .index_subtract(
-                                       ctx_state.last_occurrence_index,
-                                       tree_source.tree.window.start().raw()),
-                               bit_history: ctx_state.bit_history,
+                           let last_occurrence_index = tree_source.tree.window
+                               .index_subtract(
+                                   ctx_state.last_occurrence_index(),
+                                   tree_source.tree.window.start().raw());
+                           match ctx_state {
+                               &ContextState::ForEdge {
+                                   occurrence_count, repeated_bit, ..
+                               } => ContextState::ForEdge {
+                                   last_occurrence_index,
+                                   occurrence_count,
+                                   repeated_bit,
+                               },
+                               &ContextState::ForNode {
+                                   probability_estimator, bit_history, ..
+                               } => ContextState::ForNode {
+                                   last_occurrence_index,
+                                   probability_estimator,
+                                   bit_history,
+                               },
                            }
                        }).collect::<Vec<_>>()[..],
                        "index = {}, bit index = {}, input = {:?}",

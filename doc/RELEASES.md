@@ -1,5 +1,9 @@
 # Releases
 
+### Version 0.7.0
+
+- Added semi-stationary counters (probability estimators) to history sources
+
 ### Version 0.6.0
 
 - Implemented entropy coding and estimation

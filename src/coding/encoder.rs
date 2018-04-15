@@ -18,8 +18,9 @@
 use std::io::Write;
 
 use bit::Bit;
-use entropy::FinalProbability;
 use fixed_point::FixedPoint;
+
+use super::FinalProbability;
 
 pub struct Encoder<'a> {
     writer: &'a mut Write,

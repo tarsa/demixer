@@ -18,17 +18,18 @@
 extern crate demixer;
 
 use demixer::bit::Bit;
-use demixer::entropy::FinalProbability;
-use demixer::estimators::decelerating::*;
+use demixer::coding::FinalProbability;
+use demixer::estimators::decelerating::DeceleratingEstimator;
 use demixer::estimators::fixed_speed::FixedSpeedEstimator;
 use demixer::fixed_point::{FixedPoint, FixI32, FixU32, FixI64};
 use demixer::fixed_point::types::Log2Q;
-use demixer::lut::log2::{LOG2_ACCURATE_BITS, Log2Lut, make_log2_lut};
+use demixer::lut::estimator::DeceleratingEstimatorLut;
+use demixer::lut::log2::{LOG2_ACCURATE_BITS, Log2Lut};
 
 #[test]
 fn decelerating_estimator_is_good() {
     let lut = DeceleratingEstimatorLut::make_default();
-    let log_lut = make_log2_lut();
+    let log_lut = Log2Lut::new();
     for x in -16..16 + 1 {
         let max_overhead = (1 + (x as i32).abs()) as f64 / 100.0;
         let power = (-x as f64) / 2.0;
@@ -40,7 +41,7 @@ fn decelerating_estimator_is_good() {
 
 #[test]
 fn fixed_speed_estimator_is_good() {
-    let log_lut = make_log2_lut();
+    let log_lut = Log2Lut::new();
     for x in -14..14 + 1 {
         let max_overhead = (2 + (x as i32).abs()) as f64 / 100.0;
         let power = (-x as f64) / 2.0;

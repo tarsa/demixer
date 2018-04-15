@@ -18,8 +18,10 @@
 use core::fmt;
 
 use bit::Bit;
-use history::updated_bit_history;
+use estimators::decelerating::DeceleratingEstimator;
+use history::{ContextState, updated_bit_history};
 use history::window::WindowIndex;
+use lut::estimator::DeceleratingEstimatorLut;
 use super::direction::Direction;
 use super::node_child::NodeChild;
 
@@ -28,6 +30,7 @@ pub struct Node {
     pub children: [NodeChild; 2],
     // counter: SimpleCounter,
     pub text_start: u32,
+    probability_estimator: DeceleratingEstimator,
     history_state: u16,
     depth: u16,
     left_count: u16,
@@ -38,14 +41,16 @@ impl Node {
     pub const INVALID: Node = Node {
         children: [NodeChild::INVALID, NodeChild::INVALID],
         text_start: 0,
+        probability_estimator: DeceleratingEstimator::INVALID,
         history_state: 0,
         depth: 0,
         left_count: 0,
         right_count: 0,
     };
 
-    pub fn new(text_start: WindowIndex, depth: usize,
-               left_count: usize, right_count: usize, history_state: u32,
+    pub fn new(text_start: WindowIndex,
+               probability_estimator: DeceleratingEstimator, depth: usize,
+               left_count: u16, right_count: u16, history_state: u16,
                children: [NodeChild; 2]) -> Node {
         assert!((text_start.raw() as u64) < 1u64 << 31);
         assert!((depth as u64) < 1u64 << 16);
@@ -55,10 +60,11 @@ impl Node {
         Node {
             children,
             text_start: text_start.raw() as u32,
-            history_state: history_state as u16,
+            probability_estimator,
+            history_state,
             depth: depth as u16,
-            left_count: left_count as u16,
-            right_count: right_count as u16,
+            left_count,
+            right_count,
         }
     }
 
@@ -71,36 +77,41 @@ impl Node {
         WindowIndex::new(self.text_start as usize)
     }
 
+    pub fn probability_estimator(&self) -> DeceleratingEstimator {
+        self.probability_estimator
+    }
+
     pub fn depth(&self) -> usize {
         self.depth as usize
     }
 
-    pub fn left_count(&self) -> usize {
-        self.left_count as usize
+    pub fn left_count(&self) -> u16 {
+        self.left_count
     }
 
-    pub fn right_count(&self) -> usize {
-        self.right_count as usize
+    pub fn right_count(&self) -> u16 {
+        self.right_count
     }
 
-    pub fn history_state(&self) -> u32 {
-        self.history_state as u32
+    pub fn history_state(&self) -> u16 {
+        self.history_state
     }
 
     pub fn child(&self, direction: Direction) -> NodeChild {
         self.children[direction]
     }
 
-    pub fn increment_edge_counters(&mut self, direction: Direction) {
+    pub fn increment_edge_counters(&mut self, direction: Direction,
+                                   lut: &DeceleratingEstimatorLut) {
         match direction {
-            Direction::Left =>
-                self.left_count = 63.min(self.left_count + 1),
-            Direction::Right =>
-                self.right_count = 63.min(self.right_count + 1),
+            Direction::Left => self.left_count =
+                ContextState::MAX_OCCURRENCE_COUNT.min(self.left_count + 1),
+            Direction::Right => self.right_count =
+                ContextState::MAX_OCCURRENCE_COUNT.min(self.right_count + 1),
         }
-        self.history_state = updated_bit_history(
-            self.history_state(),
-            direction.fold(|| Bit::Zero, || Bit::One)) as u16;
+        let bit: Bit = direction.into();
+        self.history_state = updated_bit_history(self.history_state, bit);
+        self.probability_estimator.update(bit, &lut);
     }
 }
 

@@ -19,7 +19,7 @@ extern crate demixer;
 
 use demixer::fixed_point::{FixedPoint, FixU32, FixU64};
 use demixer::fixed_point::types::Log2D;
-use demixer::lut::log2::{Log2Lut, make_log2_lut};
+use demixer::lut::log2::Log2Lut;
 
 struct FixU32F17(u32);
 
@@ -44,7 +44,7 @@ impl FixedPoint for FixU64F33 {
 
 #[test]
 fn log2_is_correct() {
-    let lut = make_log2_lut();
+    let lut = Log2Lut::new();
     test_log2(0.00003, &lut);
     test_log2(0.34523, &lut);
     test_log2(1.43646, &lut);

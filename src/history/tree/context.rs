@@ -20,10 +20,13 @@ use std::collections::HashMap;
 use std::ops;
 
 use PRINT_DEBUG;
+use history::ContextState;
 use history::window::{InputWindow, WindowIndex};
+use lut::estimator::DeceleratingEstimatorLut;
 use super::{Tree, TreeState};
 use super::direction::Direction;
 use super::nodes::NodeIndex;
+
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Context {
@@ -35,7 +38,8 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn descend(&mut self, tree: &mut Tree, order: usize, bit_index: usize) {
+    pub fn descend(&mut self, tree: &mut Tree, order: usize, bit_index: usize,
+                   lut: &DeceleratingEstimatorLut) {
         assert!(!self.in_leaf);
         let direction: Direction =
             tree.window.get_bit(tree.window.cursor(), bit_index).into();
@@ -49,7 +53,7 @@ impl Context {
                 node.right_count()
             }
         } as i32;
-        tree.nodes_mut()[node_index].increment_edge_counters(direction);
+        tree.nodes_mut()[node_index].increment_edge_counters(direction, lut);
         let child = tree.nodes()[node_index].child(direction);
         if child.is_window_index() {
             self.in_leaf = true;
@@ -114,8 +118,8 @@ impl ActiveContexts {
         let root_index = tree.get_root_node_index();
         tree.nodes[root_index].text_start = tree.window.cursor().raw() as u32;
         let root = &tree.nodes[root_index];
-        let incoming_edge_visits_count =
-            63.min(root.left_count() + root.right_count()) as i32;
+        let incoming_edge_visits_count = ContextState::MAX_OCCURRENCE_COUNT
+            .min(root.left_count() + root.right_count()) as i32;
         let suffix_index = tree.window.index_decrement(tree.window.cursor());
         self.items.insert(0, Context {
             suffix_index,
