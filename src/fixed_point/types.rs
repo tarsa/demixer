@@ -19,7 +19,7 @@ use super::*;
 
 use lut::log2::LOG2_ACCURATE_BITS;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NoFractI32(i32);
 
 impl FixedPoint for NoFractI32 {
@@ -30,7 +30,7 @@ impl FixedPoint for NoFractI32 {
     const FRACTIONAL_BITS: u8 = 0;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NoFractU32(u32);
 
 impl FixedPoint for NoFractU32 {
@@ -41,7 +41,7 @@ impl FixedPoint for NoFractU32 {
     const FRACTIONAL_BITS: u8 = 0;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NoFractI64(i64);
 
 impl FixedPoint for NoFractI64 {
@@ -52,7 +52,7 @@ impl FixedPoint for NoFractI64 {
     const FRACTIONAL_BITS: u8 = 0;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NoFractU64(u64);
 
 impl FixedPoint for NoFractU64 {
@@ -63,7 +63,7 @@ impl FixedPoint for NoFractU64 {
     const FRACTIONAL_BITS: u8 = 0;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FractOnlyI32(i32);
 
 impl FixedPoint for FractOnlyI32 {
@@ -75,7 +75,7 @@ impl FixedPoint for FractOnlyI32 {
     const FRACTIONAL_BITS: u8 = 31;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FractOnlyU32(u32);
 
 impl FixedPoint for FractOnlyU32 {
@@ -87,7 +87,7 @@ impl FixedPoint for FractOnlyU32 {
     const FRACTIONAL_BITS: u8 = 31;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FractOnlyI64(i64);
 
 impl FixedPoint for FractOnlyI64 {
@@ -99,7 +99,7 @@ impl FixedPoint for FractOnlyI64 {
     const FRACTIONAL_BITS: u8 = 63;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FractOnlyU64(u64);
 
 impl FixedPoint for FractOnlyU64 {

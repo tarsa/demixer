@@ -15,31 +15,24 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use ::fixed_point::*;
+use fixed_point::{FixedPoint, FixU32, fix_u32};
+use fixed_point::types::FractOnlyU32;
 
 pub const LOG2_ACCURATE_BITS: u8 = 11;
 
-pub struct Log2Lut([u8; 1 << LOG2_ACCURATE_BITS]);
+pub struct Log2Lut([u8; 1usize << LOG2_ACCURATE_BITS]);
 
 impl Log2Lut {
     pub fn new() -> Log2Lut {
-        let two = Log2Type::new(2 << 30, 30);
         let mut log2_lut = [<u8>::max_value(); 1 << LOG2_ACCURATE_BITS];
-        for index in 0usize..1 << LOG2_ACCURATE_BITS {
-            let a = (1 << LOG2_ACCURATE_BITS) + index as u32;
-            let mut log_raw = 0u32;
-            let mut a_power =
-                Log2Type::new((a as u32) << 30 - LOG2_ACCURATE_BITS, 30);
-            for _ in 0..LOG2_ACCURATE_BITS + 1 {
-                log_raw <<= 1;
-                a_power = fix_u32::mul(&a_power, &a_power);
-                if a_power >= two {
-                    log_raw |= 1;
-                    a_power = Log2Type::new(a_power.raw() / 2, 30);
-                }
-            }
-            let log_scaled = (log_raw + 1) >> 1;
-            let diff = log_scaled - index as u32;
+        for input in 1 << LOG2_ACCURATE_BITS..2 << LOG2_ACCURATE_BITS {
+            let half_input = FractOnlyU32::new(
+                ((input as u32) << 31 - LOG2_ACCURATE_BITS - 1) as u32, 31);
+            let log2 = one_plus_log2_restricted(half_input);
+            let log2_scaled = log2.raw() >> 31 - LOG2_ACCURATE_BITS - 1;
+            let log2_scaled = (log2_scaled + 1) >> 1;
+            let index = input - (1 << LOG2_ACCURATE_BITS);
+            let diff = log2_scaled - index as u32;
             assert!(diff <= 176);
             log2_lut[index] = diff as u8;
         }
@@ -55,15 +48,26 @@ impl Log2Lut {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Log2Type(u32);
-
-impl FixedPoint for Log2Type {
-    type Raw = u32;
-    fn raw(&self) -> u32 { self.0 }
-    fn new_unchecked(raw: u32) -> Self { Log2Type(raw) }
-
-    const FRACTIONAL_BITS: u8 = 30;
+/// Input [0.5, 1.0)
+///
+/// Output [0.0, 1.0) = log2(input) + 1
+pub fn one_plus_log2_restricted(input: FractOnlyU32) -> FractOnlyU32 {
+    assert!(input.within_bounds());
+    let half = FractOnlyU32::new(1 << 30, 31);
+    let mut log_raw = 0u32;
+    let mut a_power = input;
+    assert_eq!(a_power.trunc(), 0);
+    assert!(a_power >= half);
+    for _ in 0..FractOnlyU32::FRACTIONAL_BITS {
+        log_raw <<= 1;
+        a_power = fix_u32::mul(&a_power, &a_power);
+        if a_power < half {
+            a_power = FractOnlyU32::new(a_power.raw() * 2, 31);
+        } else {
+            log_raw |= 1;
+        }
+    }
+    FractOnlyU32::new(log_raw, 31)
 }
 
 #[cfg(test)]
@@ -83,6 +87,18 @@ mod tests {
             assert!(diff <= 176);
             assert_eq!(diff as u8, lut.0[index]);
             assert_eq!(lut.log2_restricted(input), output - scale);
+        }
+    }
+
+    #[test]
+    fn binary_logarithm_computation_is_correct() {
+        for input in 500..1000 {
+            let input = input as f64 / 1000.0;
+            let expected = input.log2() + 1.0;
+            let actual = one_plus_log2_restricted(
+                FractOnlyU32::new((((1u32 << 31) as f64) * input) as u32, 31)
+            ).as_f64();
+            assert!((actual - expected).abs() < 0.00001);
         }
     }
 }
