@@ -24,21 +24,21 @@ use lut::estimator::*;
 pub struct DeceleratingEstimator(u32);
 
 impl DeceleratingEstimator {
-    pub const LENGTH_BITS: u8 = 10;
-    const PREDICTION_BITS: u8 = 32 - Self::LENGTH_BITS;
+    pub const COUNT_BITS: u8 = 10;
+    const PREDICTION_BITS: u8 = 32 - Self::COUNT_BITS;
 
-    pub const MAX_LENGTH: u16 = 1000;
+    pub const MAX_COUNT: u16 = 1000;
 
     pub const INVALID: DeceleratingEstimator =
         DeceleratingEstimator(0);
 
     pub fn new() -> DeceleratingEstimator {
         let prediction = FractOnlyU32::new(1 << 30, 31);
-        let length = 0;
-        Self::make(prediction, length)
+        let count = 0;
+        Self::make(prediction, count)
     }
 
-    pub fn make(prediction: FractOnlyU32, length: u16)
+    pub fn make(prediction: FractOnlyU32, count: u16)
                 -> DeceleratingEstimator {
         assert!(FractOnlyU32::FRACTIONAL_BITS > Self::PREDICTION_BITS);
         let diff_bits = FractOnlyU32::FRACTIONAL_BITS - Self::PREDICTION_BITS;
@@ -53,27 +53,27 @@ impl DeceleratingEstimator {
                 prediction
             };
         assert!(prediction > 0 && prediction < (1 << Self::PREDICTION_BITS));
-        assert!(length <= Self::MAX_LENGTH);
-        let raw = (prediction << Self::LENGTH_BITS) | (length as u32);
+        assert!(count <= Self::MAX_COUNT);
+        let raw = (prediction << Self::COUNT_BITS) | (count as u32);
         DeceleratingEstimator(raw)
     }
 
     /** Probability of bit 0 */
     pub fn prediction(&self) -> FractOnlyU32 {
-        let raw = self.0 >> Self::LENGTH_BITS;
+        let raw = self.0 >> Self::COUNT_BITS;
         assert!(FractOnlyU32::FRACTIONAL_BITS > Self::PREDICTION_BITS);
         let shift = FractOnlyU32::FRACTIONAL_BITS - Self::PREDICTION_BITS;
         FractOnlyU32::new_unchecked(raw << shift)
     }
 
-    pub fn length(&self) -> u16 {
-        (self.0 as u16) & ((1 << Self::LENGTH_BITS) - 1)
+    pub fn usage_count(&self) -> u16 {
+        (self.0 as u16) & ((1 << Self::COUNT_BITS) - 1)
     }
 
     pub fn update(&mut self, value: Bit, lut: &DeceleratingEstimatorLut) {
         let prediction = self.prediction();
-        let length = self.length();
-        let factor = lut[length];
+        let count = self.usage_count();
+        let factor = lut[count];
         let prediction = match value {
             Bit::Zero => {
                 let error = FractOnlyU32::new_unchecked(
@@ -87,7 +87,7 @@ impl DeceleratingEstimator {
                 prediction.sub(&correction)
             }
         };
-        let length = (length + 1).min(Self::MAX_LENGTH);
-        *self = Self::make(prediction, length);
+        let count = (count + 1).min(Self::MAX_COUNT);
+        *self = Self::make(prediction, count);
     }
 }

@@ -578,10 +578,9 @@ impl<'a> Tree<'a> {
             context.incoming_edge_visits_count as u16;
         let bit = self.window.get_bit(self.window.cursor(), bit_index);
         let direction: Direction = bit.into();
-        let mut probability_estimator = luts.d_estimator_cache()
-            .for_bit_run(!bit,
-                         DeceleratingEstimator::MAX_LENGTH
-                             .min(incoming_edge_visits_count));
+        let mut probability_estimator = luts.d_estimator_cache().for_bit_run(
+            !bit,
+            DeceleratingEstimator::MAX_COUNT.min(incoming_edge_visits_count));
         probability_estimator.update(bit, luts.d_estimator_lut());
         let bit_history = updated_bit_history(make_bit_run_history(
             incoming_edge_visits_count, !bit), bit);
@@ -614,10 +613,9 @@ impl<'a> Tree<'a> {
                 direction.fold(|| chained_child, || branching_child),
             ];
             let mut probability_estimator = luts.d_estimator_cache()
-                .for_bit_run(
-                    !bit, (DeceleratingEstimator::MAX_LENGTH as usize)
-                        .min(self.window.size() - current_context_order - 1)
-                        as u16);
+                .for_bit_run(!bit, (DeceleratingEstimator::MAX_COUNT as usize)
+                    .min(self.window.size() - current_context_order - 1)
+                    as u16);
             probability_estimator.update(bit, luts.d_estimator_lut());
             let bit_history = updated_bit_history(
                 make_bit_run_history((self.window.size() - current_context_order

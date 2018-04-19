@@ -23,7 +23,7 @@ use fixed_point::FixedPoint;
 use fixed_point::types::FractOnlyU32;
 
 pub struct DeceleratingEstimatorLut(
-    [FractOnlyU32; 1 << DeceleratingEstimator::LENGTH_BITS]);
+    [FractOnlyU32; 1 << DeceleratingEstimator::COUNT_BITS]);
 
 impl DeceleratingEstimatorLut {
     pub fn make_default() -> DeceleratingEstimatorLut {
@@ -32,7 +32,7 @@ impl DeceleratingEstimatorLut {
 
     pub fn make(factor: u32, addend: u32) -> DeceleratingEstimatorLut {
         let mut array = [FractOnlyU32::new_unchecked(0);
-            1 << DeceleratingEstimator::LENGTH_BITS];
+            1 << DeceleratingEstimator::COUNT_BITS];
         for index in 0..array.len() {
             let denominator = (index as u32) * factor + addend;
             array[index] = FractOnlyU32::new_unchecked(
@@ -51,13 +51,13 @@ impl Index<u16> for DeceleratingEstimatorLut {
 }
 
 pub struct DeceleratingEstimatorCache(
-    [DeceleratingEstimator; 1 << DeceleratingEstimator::LENGTH_BITS]);
+    [DeceleratingEstimator; 1usize << DeceleratingEstimator::COUNT_BITS]);
 
 impl DeceleratingEstimatorCache {
     pub fn new(lut: &DeceleratingEstimatorLut) -> DeceleratingEstimatorCache {
         let mut current = DeceleratingEstimator::new();
         let mut array = [DeceleratingEstimator::INVALID;
-            1 << DeceleratingEstimator::LENGTH_BITS];
+            1 << DeceleratingEstimator::COUNT_BITS];
         for index in 0..array.len() {
             array[index] = current;
             current.update(Bit::Zero, lut);
@@ -67,14 +67,14 @@ impl DeceleratingEstimatorCache {
 
     pub fn for_bit_run(&self, bit: Bit, run_length: u16)
                        -> DeceleratingEstimator {
-        assert!(run_length <= DeceleratingEstimator::MAX_LENGTH);
+        assert!(run_length <= DeceleratingEstimator::MAX_COUNT);
         if bit.is_0() {
             self.0[run_length as usize]
         } else {
             let inverse = self.0[run_length as usize];
             let prediction = FractOnlyU32::new(
                 (1 << 31) - inverse.prediction().raw(), 31);
-            DeceleratingEstimator::make(prediction, inverse.length())
+            DeceleratingEstimator::make(prediction, inverse.usage_count())
         }
     }
 }

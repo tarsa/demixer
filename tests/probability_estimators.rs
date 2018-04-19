@@ -59,7 +59,7 @@ fn check_decelerating_estimator_single(probability: f64,
     let mut total_cost = Log2Q::new(0, LOG2_ACCURATE_BITS);
     let mut zeros = 0;
     let mut accumulator = probability;
-    let warm_up = DeceleratingEstimator::MAX_LENGTH;
+    let warm_up = DeceleratingEstimator::MAX_COUNT;
     let measured = warm_up * 10;
     let total = warm_up + measured;
     for iteration in 0..total {

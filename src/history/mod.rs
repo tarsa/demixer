@@ -42,7 +42,7 @@ pub enum ContextState {
 
 impl ContextState {
     pub const MAX_OCCURRENCE_COUNT: u16 =
-        DeceleratingEstimator::MAX_LENGTH;
+        DeceleratingEstimator::MAX_COUNT;
 
     pub fn last_occurrence_index(&self) -> WindowIndex {
         match self {

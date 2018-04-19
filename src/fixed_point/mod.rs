@@ -20,7 +20,7 @@ pub mod types;
 use std::fmt::Debug;
 
 use fixed_point::types::Log2D;
-use lut::log2::Log2Lut;
+use lut::log2::{LOG2_ACCURATE_BITS, Log2Lut};
 
 pub trait FixedPoint where Self: Sized {
     type Raw: AsFloat + Copy + Debug;
@@ -183,7 +183,7 @@ pub trait FixU32: FixedPoint<Raw=u32> {
         assert_ne!(self.raw(), 0);
         let leading_zeros = self.raw().leading_zeros() as u8;
         let raw_shifted = (self.raw() << leading_zeros)
-            >> Self::TOTAL_BITS - Log2D::FRACTIONAL_BITS - 1;
+            >> Self::TOTAL_BITS - LOG2_ACCURATE_BITS - 1;
         let result_fract = lut.log2_restricted(raw_shifted) as i32;
         let result_trunc =
             Self::INTEGRAL_BITS as i32 - leading_zeros as i32 - 1;
@@ -302,7 +302,7 @@ pub trait FixU64: FixedPoint<Raw=u64> {
         assert_ne!(self.raw(), 0);
         let leading_zeros = self.raw().leading_zeros() as u8;
         let raw_shifted = (self.raw() << leading_zeros)
-            >> Self::TOTAL_BITS - Log2D::FRACTIONAL_BITS - 1;
+            >> Self::TOTAL_BITS - LOG2_ACCURATE_BITS - 1;
         let result_fract = lut.log2_restricted(raw_shifted as u32) as i32;
         let result_trunc =
             Self::INTEGRAL_BITS as i32 - leading_zeros as i32 - 1;
