@@ -24,7 +24,7 @@ use demixer::estimators::fixed_speed::FixedSpeedEstimator;
 use demixer::fixed_point::{FixedPoint, FixI32, FixU32, FixI64};
 use demixer::fixed_point::types::Log2Q;
 use demixer::lut::estimator::DeceleratingEstimatorLut;
-use demixer::lut::log2::{LOG2_ACCURATE_BITS, Log2Lut};
+use demixer::lut::log2::Log2Lut;
 
 #[test]
 fn decelerating_estimator_is_good() {
@@ -56,7 +56,7 @@ fn check_decelerating_estimator_single(probability: f64,
                                        max_overhead: f64) {
     assert!(probability > 0.0 && probability < 1.0);
     let mut estimator = DeceleratingEstimator::new();
-    let mut total_cost = Log2Q::new(0, LOG2_ACCURATE_BITS);
+    let mut total_cost = Log2Q::new_unchecked(0);
     let mut zeros = 0;
     let mut accumulator = probability;
     let warm_up = DeceleratingEstimator::MAX_COUNT;
@@ -92,7 +92,7 @@ fn check_fixed_speed_estimator_single(probability: f64,
     assert!(probability > 0.0 && probability < 1.0);
     let mut estimator =
         FixedSpeedEstimator::new((probability * (1 << 16) as f64) as u16);
-    let mut total_cost = Log2Q::new(0, LOG2_ACCURATE_BITS);
+    let mut total_cost = Log2Q::new_unchecked(0);
     let mut zeros = 0;
     let mut accumulator = probability;
     let warm_up = 2000;

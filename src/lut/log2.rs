@@ -18,20 +18,20 @@
 use fixed_point::{FixedPoint, FixU32, fix_u32};
 use fixed_point::types::FractOnlyU32;
 
-pub const LOG2_ACCURATE_BITS: u8 = 11;
-
-pub struct Log2Lut([u8; 1usize << LOG2_ACCURATE_BITS]);
+pub struct Log2Lut([u8; 1usize << Log2Lut::INDEX_BITS]);
 
 impl Log2Lut {
+    pub const INDEX_BITS: u8 = 11;
+
     pub fn new() -> Log2Lut {
-        let mut log2_lut = [<u8>::max_value(); 1 << LOG2_ACCURATE_BITS];
-        for input in 1 << LOG2_ACCURATE_BITS..2 << LOG2_ACCURATE_BITS {
+        let mut log2_lut = [<u8>::max_value(); 1 << Self::INDEX_BITS];
+        for input in 1 << Self::INDEX_BITS..2 << Self::INDEX_BITS {
             let half_input = FractOnlyU32::new(
-                ((input as u32) << 31 - LOG2_ACCURATE_BITS - 1) as u32, 31);
+                ((input as u32) << 31 - Self::INDEX_BITS - 1) as u32, 31);
             let log2 = one_plus_log2_restricted(half_input);
-            let log2_scaled = log2.raw() >> 31 - LOG2_ACCURATE_BITS - 1;
+            let log2_scaled = log2.raw() >> 31 - Self::INDEX_BITS - 1;
             let log2_scaled = (log2_scaled + 1) >> 1;
-            let index = input - (1 << LOG2_ACCURATE_BITS);
+            let index = input - (1 << Self::INDEX_BITS);
             let diff = log2_scaled - index as u32;
             assert!(diff <= 176);
             log2_lut[index] = diff as u8;
@@ -39,11 +39,11 @@ impl Log2Lut {
         Log2Lut(log2_lut)
     }
 
-    /// Input [1.0, 2.0) scaled by LOG2_ACCURATE_BITS
+    /// Input [1.0, 2.0) scaled by Self::INDEX_BITS
     ///
-    /// Output [0.0, 1.0) scaled by LOG2_ACCURATE_BITS
+    /// Output [0.0, 1.0) scaled by Self::INDEX_BITS
     pub fn log2_restricted(&self, input: u32) -> u32 {
-        let fract = input - (1 << LOG2_ACCURATE_BITS);
+        let fract = input - (1 << Self::INDEX_BITS);
         self.0[fract as usize] as u32 + fract
     }
 }

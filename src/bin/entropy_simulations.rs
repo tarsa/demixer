@@ -23,7 +23,7 @@ use demixer::estimators::decelerating::DeceleratingEstimator;
 use demixer::fixed_point::{FixedPoint, FixI32, FixU32, FixI64};
 use demixer::fixed_point::types::Log2Q;
 use demixer::lut::estimator::DeceleratingEstimatorLut;
-use demixer::lut::log2::{LOG2_ACCURATE_BITS, Log2Lut};
+use demixer::lut::log2::Log2Lut;
 
 fn main() {
     let log_lut = Log2Lut::new();
@@ -51,7 +51,7 @@ fn check_decelerating_estimator_single(probability: f64,
                                        single_run_length: u32) {
     assert!(probability > 0.0 && probability < 1.0);
     let mut estimator = DeceleratingEstimator::new();
-    let mut total_cost = Log2Q::new(0, LOG2_ACCURATE_BITS);
+    let mut total_cost = Log2Q::new_unchecked(0);
     let mut zeros = 0;
     let mut accumulator = probability;
     let total_predictions = 10_000;

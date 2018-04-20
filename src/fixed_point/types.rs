@@ -17,7 +17,7 @@
  */
 use super::*;
 
-use lut::log2::LOG2_ACCURATE_BITS;
+use lut::log2::Log2Lut;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NoFractI32(i32);
@@ -119,7 +119,7 @@ impl FixedPoint for Log2D {
     fn raw(&self) -> i32 { self.0 }
     fn new_unchecked(raw: i32) -> Self { Log2D(raw) }
 
-    const FRACTIONAL_BITS: u8 = LOG2_ACCURATE_BITS;
+    const FRACTIONAL_BITS: u8 = Log2Lut::INDEX_BITS;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -130,5 +130,5 @@ impl FixedPoint for Log2Q {
     fn raw(&self) -> i64 { self.0 }
     fn new_unchecked(raw: i64) -> Self { Log2Q(raw) }
 
-    const FRACTIONAL_BITS: u8 = LOG2_ACCURATE_BITS;
+    const FRACTIONAL_BITS: u8 = Log2Lut::INDEX_BITS;
 }
