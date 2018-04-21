@@ -23,12 +23,11 @@ use history::{ContextState, updated_bit_history};
 use history::window::WindowIndex;
 use lut::estimator::DeceleratingEstimatorLut;
 use super::direction::Direction;
-use super::node_child::NodeChild;
+use super::node_child::{NodeChild, NodeChildren};
 
 #[derive(Clone)]
 pub struct Node {
-    pub children: [NodeChild; 2],
-    // counter: SimpleCounter,
+    pub children: NodeChildren,
     pub text_start: u32,
     probability_estimator: DeceleratingEstimator,
     history_state: u16,
@@ -39,7 +38,7 @@ pub struct Node {
 
 impl Node {
     pub const INVALID: Node = Node {
-        children: [NodeChild::INVALID, NodeChild::INVALID],
+        children: NodeChildren::INVALID,
         text_start: 0,
         probability_estimator: DeceleratingEstimator::INVALID,
         history_state: 0,
@@ -51,7 +50,7 @@ impl Node {
     pub fn new(text_start: WindowIndex,
                probability_estimator: DeceleratingEstimator, depth: usize,
                left_count: u16, right_count: u16, history_state: u16,
-               children: [NodeChild; 2]) -> Node {
+               children: NodeChildren) -> Node {
         assert!((text_start.raw() as u64) < 1u64 << 31);
         assert!((depth as u64) < 1u64 << 16);
         assert!((left_count as u64) < 1u64 << 16);
@@ -69,8 +68,8 @@ impl Node {
     }
 
     pub fn is_valid(&self) -> bool {
-        self.children[0] != NodeChild::INVALID &&
-            self.children[1] != NodeChild::INVALID
+        self.children[Direction::Left] != NodeChild::INVALID &&
+            self.children[Direction::Right] != NodeChild::INVALID
     }
 
     pub fn text_start(&self) -> WindowIndex {

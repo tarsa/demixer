@@ -70,7 +70,8 @@ impl Nodes {
         if let Some(last_deleted_node_index) = self.last_deleted_node_idx_opt {
             assert!(self.removed_nodes_count > 0);
             self.removed_nodes_count -= 1;
-            let old_node_children = self[last_deleted_node_index].children;
+            let old_node_children =
+                self[last_deleted_node_index].children.clone();
             assert!(!old_node_children[Direction::Left].is_valid());
             let next_deleted_node_handle = old_node_children[Direction::Right];
             if next_deleted_node_handle.is_valid() {

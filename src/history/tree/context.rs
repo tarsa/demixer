@@ -161,8 +161,8 @@ impl ActiveContexts {
                     .get(&node_index.raw()).unwrap_or(&node.text_start());
                 let full_byte_length = node.depth() / 8;
                 let bit_index = 7 - (node.depth() % 8);
-                let children = tree.nodes[node_index].children;
-                for child in children.iter() {
+                let children = &tree.nodes[node_index].children;
+                for child in children.items().iter() {
                     assert!(child.is_valid());
                     if child.is_node_index() {
                         let child_node = &tree.nodes[child.to_node_index()];

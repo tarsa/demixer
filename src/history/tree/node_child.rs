@@ -15,7 +15,10 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+use std::ops;
+
 use history::window::WindowIndex;
+use super::direction::Direction;
 use super::nodes::{NodeIndex, Nodes};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -62,5 +65,45 @@ impl From<NodeIndex> for NodeChild {
         let node_index = node_index.raw();
         assert!(node_index >= Nodes::NUM_ROOTS && node_index <= 0x7fff_ffff);
         NodeChild { value: !(node_index as i32) }
+    }
+}
+
+#[derive(Clone)]
+pub struct NodeChildren([NodeChild; 2]);
+
+impl NodeChildren {
+    pub const INVALID: Self =
+        NodeChildren([NodeChild::INVALID, NodeChild::INVALID]);
+
+    pub fn new(children: [NodeChild; 2]) -> Self {
+        NodeChildren(children)
+    }
+
+    pub fn items(&self) -> &[NodeChild; 2] {
+        &self.0
+    }
+
+    fn items_mut(&mut self) -> &mut [NodeChild; 2] {
+        &mut self.0
+    }
+}
+
+impl ops::Index<Direction> for NodeChildren {
+    type Output = NodeChild;
+
+    fn index(&self, index: Direction) -> &NodeChild {
+        match index {
+            Direction::Left => &self.items()[0],
+            Direction::Right => &self.items()[1],
+        }
+    }
+}
+
+impl ops::IndexMut<Direction> for NodeChildren {
+    fn index_mut(&mut self, index: Direction) -> &mut NodeChild {
+        match index {
+            Direction::Left => &mut self.items_mut()[0],
+            Direction::Right => &mut self.items_mut()[1],
+        }
     }
 }

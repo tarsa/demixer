@@ -18,7 +18,6 @@
 use std::ops;
 
 use bit::Bit;
-use super::node_child::NodeChild;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Direction {
@@ -32,26 +31,6 @@ impl Direction {
         match *self {
             Direction::Left => on_left(),
             Direction::Right => on_right(),
-        }
-    }
-}
-
-impl ops::Index<Direction> for [NodeChild; 2] {
-    type Output = NodeChild;
-
-    fn index(&self, index: Direction) -> &NodeChild {
-        match index {
-            Direction::Left => &self[0],
-            Direction::Right => &self[1],
-        }
-    }
-}
-
-impl ops::IndexMut<Direction> for [NodeChild; 2] {
-    fn index_mut(&mut self, index: Direction) -> &mut NodeChild {
-        match index {
-            Direction::Left => &mut self[0],
-            Direction::Right => &mut self[1],
         }
     }
 }

@@ -33,7 +33,7 @@ use super::window::{InputWindow, WindowIndex};
 use self::context::{ActiveContexts, Context};
 use self::direction::Direction;
 use self::node::Node;
-use self::node_child::NodeChild;
+use self::node_child::{NodeChild, NodeChildren};
 use self::nodes::{NodeIndex, Nodes};
 
 pub struct TreeHistorySource<'a> {
@@ -345,8 +345,8 @@ impl<'a> Tree<'a> {
             let mut stack = Vec::new();
             stack.push(self.get_root_node_index());
             while let Some(node_index) = stack.pop() {
-                let children = self.nodes[node_index].children;
-                for child in children.iter() {
+                let children = &self.nodes[node_index].children;
+                for child in children.items().iter() {
                     assert!(child.is_valid());
                     if child.is_node_index() {
                         stack.push(child.to_node_index());
@@ -590,7 +590,7 @@ impl<'a> Tree<'a> {
                   direction.fold(|| 1, || incoming_edge_visits_count),
                   direction.fold(|| incoming_edge_visits_count, || 1),
                   bit_history,
-                  Node::INVALID.children)
+                  NodeChildren::INVALID)
     }
 
     fn split_degenerate_root_edge(&mut self, context_order: usize,
@@ -608,10 +608,10 @@ impl<'a> Tree<'a> {
             let branching_child: NodeChild = suffix_start.into();
             let chained_child = last_node_index_opt.unwrap_or(
                 self.window.index_decrement(suffix_start).into());
-            let children = [
+            let children = NodeChildren::new([
                 direction.fold(|| branching_child, || chained_child),
                 direction.fold(|| chained_child, || branching_child),
-            ];
+            ]);
             let mut probability_estimator = luts.d_estimator_cache()
                 .for_bit_run(!bit, (DeceleratingEstimator::MAX_COUNT as usize)
                     .min(self.window.size() - current_context_order - 1)
