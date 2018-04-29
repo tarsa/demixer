@@ -19,6 +19,7 @@ pub mod types;
 
 use std::fmt::Debug;
 
+use DO_CHECKS;
 use fixed_point::types::Log2D;
 use lut::log2::Log2Lut;
 
@@ -28,9 +29,12 @@ pub trait FixedPoint where Self: Sized {
     fn raw(&self) -> Self::Raw;
     fn new_unchecked(raw: Self::Raw) -> Self;
     fn new(raw: Self::Raw, fractional_bits: u8) -> Self {
-        assert_eq!(fractional_bits, Self::FRACTIONAL_BITS);
+        if DO_CHECKS {
+            assert_eq!(fractional_bits, Self::FRACTIONAL_BITS,
+                       "fractional bits numbers don't match");
+        }
         let result = Self::new_unchecked(raw);
-        assert!(result.within_bounds(), "{:?}", raw);
+        if DO_CHECKS { assert!(result.within_bounds(), "{:?}", raw); }
         result
     }
     fn within_bounds(&self) -> bool { true }
@@ -50,6 +54,10 @@ pub trait FixI32: FixedPoint<Raw=i32> {
     const TOTAL_BITS: u8 = 32;
     const INTEGRAL_BITS: u8 = Self::TOTAL_BITS - Self::FRACTIONAL_BITS;
 
+    fn ulp() -> Self {
+        Self::new_unchecked(1)
+    }
+
     fn trunc(&self) -> Self::Raw {
         self.raw() >> Self::FRACTIONAL_BITS
     }
@@ -58,11 +66,11 @@ pub trait FixI32: FixedPoint<Raw=i32> {
         let raw = self.raw();
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (raw.signum() << (bits_diff - 1))) >> bits_diff,
+            R::new((raw + (raw.signum() << (bits_diff - 1))) / (1 << bits_diff),
                    R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
-            assert_eq!(raw << bits_diff >> bits_diff, raw);
+            if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
             R::new(raw << bits_diff, R::FRACTIONAL_BITS)
         }
     }
@@ -71,25 +79,35 @@ pub trait FixI32: FixedPoint<Raw=i32> {
         let raw = self.raw() as i64;
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (raw.signum() << (bits_diff - 1))) >> bits_diff,
+            R::new((raw + (raw.signum() << (bits_diff - 1))) / (1 << bits_diff),
                    R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
-            assert_eq!(raw << bits_diff >> bits_diff, raw);
+            if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
             R::new(raw << bits_diff, R::FRACTIONAL_BITS)
         }
     }
 
     fn add(&self, other: &Self) -> Self {
-        let add_raw = self.raw().checked_add(other.raw())
-            .expect("numeric range exceeded");
+        let add_raw =
+            if DO_CHECKS {
+                self.raw().checked_add(other.raw())
+                    .expect("numeric range exceeded")
+            } else {
+                self.raw() + other.raw()
+            };
         Self::new(add_raw, Self::FRACTIONAL_BITS)
     }
 
     fn sub(&self, other: &Self) -> Self {
-        let add_raw = self.raw().checked_sub(other.raw())
-            .expect("numeric range exceeded");
-        Self::new(add_raw, Self::FRACTIONAL_BITS)
+        let sub_raw =
+            if DO_CHECKS {
+                self.raw().checked_sub(other.raw())
+                    .expect("numeric range exceeded")
+            } else {
+                self.raw() - other.raw()
+            };
+        Self::new(sub_raw, Self::FRACTIONAL_BITS)
     }
 
     fn neg(&self) -> Self {
@@ -98,6 +116,7 @@ pub trait FixI32: FixedPoint<Raw=i32> {
 }
 
 pub mod fix_i32 {
+    use DO_CHECKS;
     use super::{FixI32, FixI64};
 
     pub fn mul<A: FixI32, B: FixI32, R: FixI32>(a: &A, b: &B) -> R {
@@ -106,14 +125,18 @@ pub mod fix_i32 {
         if total_fract_bits > R::FRACTIONAL_BITS {
             let bits_diff = total_fract_bits - R::FRACTIONAL_BITS;
             let result_wide = (mul_raw + (mul_raw.signum() << (bits_diff - 1)))
-                >> bits_diff;
-            assert_eq!((result_wide as i32) as i64, result_wide);
+                / (1 << bits_diff);
+            if DO_CHECKS {
+                assert_eq!((result_wide as i32) as i64, result_wide);
+            }
             R::new(result_wide as i32, R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - total_fract_bits;
             let result_wide = mul_raw << bits_diff;
-            assert_eq!((result_wide as i32) as i64, result_wide);
-            assert_eq!(result_wide >> bits_diff, mul_raw);
+            if DO_CHECKS {
+                assert_eq!((result_wide as i32) as i64, result_wide);
+                assert_eq!(result_wide >> bits_diff, mul_raw);
+            }
             R::new(result_wide as i32, R::FRACTIONAL_BITS)
         }
     }
@@ -124,10 +147,12 @@ pub mod fix_i32 {
         if total_fract_bits > R::FRACTIONAL_BITS {
             let bits_diff = total_fract_bits - R::FRACTIONAL_BITS;
             R::new((mul_raw + (mul_raw.signum() << (bits_diff - 1)))
-                       >> bits_diff, R::FRACTIONAL_BITS)
+                       / (1 << bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - total_fract_bits;
-            assert_eq!(mul_raw << bits_diff >> bits_diff, mul_raw);
+            if DO_CHECKS {
+                assert_eq!(mul_raw << bits_diff >> bits_diff, mul_raw);
+            }
             R::new(mul_raw << bits_diff, R::FRACTIONAL_BITS)
         }
     }
@@ -136,6 +161,10 @@ pub mod fix_i32 {
 pub trait FixU32: FixedPoint<Raw=u32> {
     const TOTAL_BITS: u8 = 32;
     const INTEGRAL_BITS: u8 = Self::TOTAL_BITS - Self::FRACTIONAL_BITS;
+
+    fn ulp() -> Self {
+        Self::new_unchecked(1)
+    }
 
     fn trunc(&self) -> Self::Raw {
         self.raw() >> Self::FRACTIONAL_BITS
@@ -149,7 +178,7 @@ pub trait FixU32: FixedPoint<Raw=u32> {
                    R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
-            assert_eq!(raw << bits_diff >> bits_diff, raw);
+            if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
             R::new(raw << bits_diff, R::FRACTIONAL_BITS)
         }
     }
@@ -162,25 +191,35 @@ pub trait FixU32: FixedPoint<Raw=u32> {
                    R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
-            assert_eq!(raw << bits_diff >> bits_diff, raw);
+            if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
             R::new(raw << bits_diff, R::FRACTIONAL_BITS)
         }
     }
 
     fn add(&self, other: &Self) -> Self {
-        let add_raw = self.raw().checked_add(other.raw())
-            .expect("numeric range exceeded");
+        let add_raw =
+            if DO_CHECKS {
+                self.raw().checked_add(other.raw())
+                    .expect("numeric range exceeded")
+            } else {
+                self.raw() + other.raw()
+            };
         Self::new(add_raw, Self::FRACTIONAL_BITS)
     }
 
     fn sub(&self, other: &Self) -> Self {
-        let add_raw = self.raw().checked_sub(other.raw())
-            .expect("numeric range exceeded");
-        Self::new(add_raw, Self::FRACTIONAL_BITS)
+        let sub_raw =
+            if DO_CHECKS {
+                self.raw().checked_sub(other.raw())
+                    .expect("numeric range exceeded")
+            } else {
+                self.raw() - other.raw()
+            };
+        Self::new(sub_raw, Self::FRACTIONAL_BITS)
     }
 
     fn log2(&self, lut: &Log2Lut) -> Log2D {
-        assert_ne!(self.raw(), 0);
+        if DO_CHECKS { assert_ne!(self.raw(), 0); }
         let leading_zeros = self.raw().leading_zeros() as u8;
         let raw_shifted = (self.raw() << leading_zeros)
             >> Self::TOTAL_BITS - Log2Lut::INDEX_BITS - 1;
@@ -193,6 +232,7 @@ pub trait FixU32: FixedPoint<Raw=u32> {
 }
 
 pub mod fix_u32 {
+    use DO_CHECKS;
     use super::{FixU32, FixU64};
 
     pub fn mul<A: FixU32, B: FixU32, R: FixU32>(a: &A, b: &B) -> R {
@@ -201,13 +241,17 @@ pub mod fix_u32 {
         if total_fract_bits > R::FRACTIONAL_BITS {
             let bits_diff = total_fract_bits - R::FRACTIONAL_BITS;
             let result_wide = (mul_raw + (1 << (bits_diff - 1))) >> bits_diff;
-            assert_eq!((result_wide as u32) as u64, result_wide);
+            if DO_CHECKS {
+                assert_eq!((result_wide as u32) as u64, result_wide);
+            }
             R::new(result_wide as u32, R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - total_fract_bits;
             let result_wide = mul_raw << bits_diff;
-            assert_eq!((result_wide as u32) as u64, result_wide);
-            assert_eq!(result_wide >> bits_diff, mul_raw);
+            if DO_CHECKS {
+                assert_eq!((result_wide as u32) as u64, result_wide);
+                assert_eq!(result_wide >> bits_diff, mul_raw);
+            }
             R::new(result_wide as u32, R::FRACTIONAL_BITS)
         }
     }
@@ -221,7 +265,9 @@ pub mod fix_u32 {
                    R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - total_fract_bits;
-            assert_eq!(mul_raw << bits_diff >> bits_diff, mul_raw);
+            if DO_CHECKS {
+                assert_eq!(mul_raw << bits_diff >> bits_diff, mul_raw);
+            }
             R::new(mul_raw << bits_diff, R::FRACTIONAL_BITS)
         }
     }
@@ -231,6 +277,10 @@ pub trait FixI64: FixedPoint<Raw=i64> {
     const TOTAL_BITS: u8 = 64;
     const INTEGRAL_BITS: u8 = Self::TOTAL_BITS - Self::FRACTIONAL_BITS;
 
+    fn ulp() -> Self {
+        Self::new_unchecked(1)
+    }
+
     fn trunc(&self) -> Self::Raw {
         self.raw() >> Self::FRACTIONAL_BITS
     }
@@ -239,25 +289,35 @@ pub trait FixI64: FixedPoint<Raw=i64> {
         let raw = self.raw();
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (raw.signum() << (bits_diff - 1))) >> bits_diff,
+            R::new((raw + (raw.signum() << (bits_diff - 1))) / (1 << bits_diff),
                    R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
-            assert_eq!(raw << bits_diff >> bits_diff, raw);
+            if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
             R::new(raw << bits_diff, R::FRACTIONAL_BITS)
         }
     }
 
     fn add(&self, other: &Self) -> Self {
-        let add_raw = self.raw().checked_add(other.raw())
-            .expect("numeric range exceeded");
+        let add_raw =
+            if DO_CHECKS {
+                self.raw().checked_add(other.raw())
+                    .expect("numeric range exceeded")
+            } else {
+                self.raw() + other.raw()
+            };
         Self::new(add_raw, Self::FRACTIONAL_BITS)
     }
 
     fn sub(&self, other: &Self) -> Self {
-        let add_raw = self.raw().checked_sub(other.raw())
-            .expect("numeric range exceeded");
-        Self::new(add_raw, Self::FRACTIONAL_BITS)
+        let sub_raw =
+            if DO_CHECKS {
+                self.raw().checked_sub(other.raw())
+                    .expect("numeric range exceeded")
+            } else {
+                self.raw() - other.raw()
+            };
+        Self::new(sub_raw, Self::FRACTIONAL_BITS)
     }
 
     fn neg(&self) -> Self {
@@ -268,6 +328,10 @@ pub trait FixI64: FixedPoint<Raw=i64> {
 pub trait FixU64: FixedPoint<Raw=u64> {
     const TOTAL_BITS: u8 = 64;
     const INTEGRAL_BITS: u8 = Self::TOTAL_BITS - Self::FRACTIONAL_BITS;
+
+    fn ulp() -> Self {
+        Self::new_unchecked(1)
+    }
 
     fn trunc(&self) -> Self::Raw {
         self.raw() >> Self::FRACTIONAL_BITS
@@ -281,25 +345,35 @@ pub trait FixU64: FixedPoint<Raw=u64> {
                    R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
-            assert_eq!(raw << bits_diff >> bits_diff, raw);
+            if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
             R::new(raw << bits_diff, R::FRACTIONAL_BITS)
         }
     }
 
     fn add(&self, other: &Self) -> Self {
-        let add_raw = self.raw().checked_add(other.raw())
-            .expect("numeric range exceeded");
+        let add_raw =
+            if DO_CHECKS {
+                self.raw().checked_add(other.raw())
+                    .expect("numeric range exceeded")
+            } else {
+                self.raw() + other.raw()
+            };
         Self::new(add_raw, Self::FRACTIONAL_BITS)
     }
 
     fn sub(&self, other: &Self) -> Self {
-        let add_raw = self.raw().checked_sub(other.raw())
-            .expect("numeric range exceeded");
-        Self::new(add_raw, Self::FRACTIONAL_BITS)
+        let sub_raw =
+            if DO_CHECKS {
+                self.raw().checked_sub(other.raw())
+                    .expect("numeric range exceeded")
+            } else {
+                self.raw() - other.raw()
+            };
+        Self::new(sub_raw, Self::FRACTIONAL_BITS)
     }
 
     fn log2(&self, lut: &Log2Lut) -> Log2D {
-        assert_ne!(self.raw(), 0);
+        if DO_CHECKS { assert_ne!(self.raw(), 0); }
         let leading_zeros = self.raw().leading_zeros() as u8;
         let raw_shifted = (self.raw() << leading_zeros)
             >> Self::TOTAL_BITS - Log2Lut::INDEX_BITS - 1;

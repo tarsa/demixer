@@ -17,6 +17,7 @@
  */
 use super::*;
 
+use DO_CHECKS;
 use lut::log2::Log2Lut;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -30,6 +31,16 @@ impl FixedPoint for NoFractI32 {
     const FRACTIONAL_BITS: u8 = 0;
 }
 
+impl NoFractI32 {
+    pub const ZERO: Self = NoFractI32(0);
+    pub const ONE: Self = NoFractI32(1i32 << Self::FRACTIONAL_BITS);
+
+    pub fn to_unsigned(&self) -> NoFractU32 {
+        if DO_CHECKS { assert!(self.raw() >= 0); }
+        NoFractU32::new(self.raw() as u32, Self::FRACTIONAL_BITS)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NoFractU32(u32);
 
@@ -39,6 +50,16 @@ impl FixedPoint for NoFractU32 {
     fn new_unchecked(raw: Self::Raw) -> Self { NoFractU32(raw) }
 
     const FRACTIONAL_BITS: u8 = 0;
+}
+
+impl NoFractU32 {
+    pub const ZERO: Self = NoFractU32(0);
+    pub const ONE: Self = NoFractU32(1u32 << Self::FRACTIONAL_BITS);
+
+    pub fn to_signed(&self) -> NoFractI32 {
+        if DO_CHECKS { assert!(self.raw() <= <i32>::max_value() as u32); }
+        NoFractI32::new(self.raw() as i32, Self::FRACTIONAL_BITS)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -52,6 +73,16 @@ impl FixedPoint for NoFractI64 {
     const FRACTIONAL_BITS: u8 = 0;
 }
 
+impl NoFractI64 {
+    pub const ZERO: Self = NoFractI64(0);
+    pub const ONE: Self = NoFractI64(1i64 << Self::FRACTIONAL_BITS);
+
+    pub fn to_unsigned(&self) -> NoFractU64 {
+        if DO_CHECKS { assert!(self.raw() >= 0); }
+        NoFractU64::new(self.raw() as u64, Self::FRACTIONAL_BITS)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NoFractU64(u64);
 
@@ -61,6 +92,16 @@ impl FixedPoint for NoFractU64 {
     fn new_unchecked(raw: Self::Raw) -> Self { NoFractU64(raw) }
 
     const FRACTIONAL_BITS: u8 = 0;
+}
+
+impl NoFractU64 {
+    pub const ZERO: Self = NoFractU64(0);
+    pub const ONE: Self = NoFractU64(1u64 << Self::FRACTIONAL_BITS);
+
+    pub fn to_signed(&self) -> NoFractI64 {
+        if DO_CHECKS { assert!(self.raw() <= <i64>::max_value() as u64); }
+        NoFractI64::new(self.raw() as i64, Self::FRACTIONAL_BITS)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -75,6 +116,21 @@ impl FixedPoint for FractOnlyI32 {
     const FRACTIONAL_BITS: u8 = 31;
 }
 
+impl FractOnlyI32 {
+    pub const ZERO: Self = FractOnlyI32(0);
+    pub const HALF: Self = FractOnlyI32(1i32 << (Self::FRACTIONAL_BITS - 1));
+    pub const ONE_UNSAFE: Self = FractOnlyI32(1i32 << Self::FRACTIONAL_BITS);
+
+    /// Returns: (1 - self)
+    pub fn flip(&self) -> Self {
+        Self::ONE_UNSAFE.sub(self)
+    }
+
+    pub fn to_unsigned(&self) -> FractOnlyU32 {
+        FractOnlyU32::new(self.raw() as u32, Self::FRACTIONAL_BITS)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FractOnlyU32(u32);
 
@@ -85,6 +141,21 @@ impl FixedPoint for FractOnlyU32 {
     fn within_bounds(&self) -> bool { (self.raw() >> 31) == 0 }
 
     const FRACTIONAL_BITS: u8 = 31;
+}
+
+impl FractOnlyU32 {
+    pub const ZERO: Self = FractOnlyU32(0);
+    pub const HALF: Self = FractOnlyU32(1u32 << (Self::FRACTIONAL_BITS - 1));
+    pub const ONE_UNSAFE: Self = FractOnlyU32(1u32 << Self::FRACTIONAL_BITS);
+
+    /// Returns: (1 - self)
+    pub fn flip(&self) -> Self {
+        Self::ONE_UNSAFE.sub(self)
+    }
+
+    pub fn to_signed(&self) -> FractOnlyI32 {
+        FractOnlyI32::new(self.raw() as i32, Self::FRACTIONAL_BITS)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -99,6 +170,21 @@ impl FixedPoint for FractOnlyI64 {
     const FRACTIONAL_BITS: u8 = 63;
 }
 
+impl FractOnlyI64 {
+    pub const ZERO: Self = FractOnlyI64(0);
+    pub const HALF: Self = FractOnlyI64(1i64 << (Self::FRACTIONAL_BITS - 1));
+    pub const ONE_UNSAFE: Self = FractOnlyI64(1i64 << Self::FRACTIONAL_BITS);
+
+    /// Returns: (1 - self)
+    pub fn flip(&self) -> Self {
+        Self::ONE_UNSAFE.sub(self)
+    }
+
+    pub fn to_unsigned(&self) -> FractOnlyU64 {
+        FractOnlyU64::new(self.raw() as u64, Self::FRACTIONAL_BITS)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FractOnlyU64(u64);
 
@@ -109,6 +195,21 @@ impl FixedPoint for FractOnlyU64 {
     fn within_bounds(&self) -> bool { (self.raw() >> 63) == 0 }
 
     const FRACTIONAL_BITS: u8 = 63;
+}
+
+impl FractOnlyU64 {
+    pub const ZERO: Self = FractOnlyU64(0);
+    pub const HALF: Self = FractOnlyU64(1u64 << (Self::FRACTIONAL_BITS - 1));
+    pub const ONE_UNSAFE: Self = FractOnlyU64(1u64 << Self::FRACTIONAL_BITS);
+
+    /// Returns: (1 - self)
+    pub fn flip(&self) -> Self {
+        Self::ONE_UNSAFE.sub(self)
+    }
+
+    pub fn to_signed(&self) -> FractOnlyI64 {
+        FractOnlyI64::new(self.raw() as i64, Self::FRACTIONAL_BITS)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -131,4 +232,25 @@ impl FixedPoint for Log2Q {
     fn new_unchecked(raw: i64) -> Self { Log2Q(raw) }
 
     const FRACTIONAL_BITS: u8 = Log2Lut::INDEX_BITS;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StretchedProbD(i32);
+
+impl FixedPoint for StretchedProbD {
+    type Raw = i32;
+    fn raw(&self) -> i32 { self.0 }
+    fn new_unchecked(raw: i32) -> Self { StretchedProbD(raw) }
+    fn within_bounds(&self) -> bool {
+        let raw = self.raw();
+        let limit = Self::ABSOLUTE_LIMIT;
+        let scale = Self::FRACTIONAL_BITS;
+        raw >= (-limit << scale) && raw <= (limit << scale)
+    }
+
+    const FRACTIONAL_BITS: u8 = 21;
+}
+
+impl StretchedProbD {
+    pub const ABSOLUTE_LIMIT: i32 = 12;
 }

@@ -71,10 +71,9 @@ impl DeceleratingEstimatorCache {
         if bit.is_0() {
             self.0[run_length as usize]
         } else {
-            let inverse = self.0[run_length as usize];
-            let prediction = FractOnlyU32::new(
-                (1 << 31) - inverse.prediction().raw(), 31);
-            DeceleratingEstimator::make(prediction, inverse.usage_count())
+            let flipped = self.0[run_length as usize];
+            let prediction = flipped.prediction().flip();
+            DeceleratingEstimator::make(prediction, flipped.usage_count())
         }
     }
 }

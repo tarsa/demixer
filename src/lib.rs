@@ -25,6 +25,9 @@ pub mod history;
 pub mod lut;
 pub mod random;
 
+pub const DO_CHECKS: bool = true;
+pub const NO_CHECKS: bool = !DO_CHECKS;
+
 pub const MAX_ORDER: usize = 63;
 
-pub const PRINT_DEBUG: bool = 2 + 2 == 5;
+pub const PRINT_DEBUG: bool = false;

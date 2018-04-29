@@ -76,8 +76,7 @@ impl DeceleratingEstimator {
         let factor = lut[count];
         let prediction = match value {
             Bit::Zero => {
-                let error = FractOnlyU32::new_unchecked(
-                    1u32 << FractOnlyU32::FRACTIONAL_BITS).sub(&prediction);
+                let error = FractOnlyU32::ONE_UNSAFE.sub(&prediction);
                 let correction: FractOnlyU32 = fix_u32::mul(&error, &factor);
                 prediction.add(&correction)
             }

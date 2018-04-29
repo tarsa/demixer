@@ -32,6 +32,7 @@ fn long_tests_skipped() {
     let luts = LookUpTables::new();
     compare_for_input(&[], 0, false, &luts);
     assert_eq!(MAX_ORDER, 0);
+    assert!(ContextState::MAX_OCCURRENCE_COUNT > 0);
 }
 
 #[test]

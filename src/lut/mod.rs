@@ -17,14 +17,20 @@
  */
 pub mod estimator;
 pub mod log2;
+pub mod squash;
+pub mod stretch;
 
 use self::estimator::*;
 use self::log2::Log2Lut;
+use self::squash::SquashLut;
+use self::stretch::StretchLut;
 
 pub struct LookUpTables {
     log2_lut: Log2Lut,
     d_estimator_lut: DeceleratingEstimatorLut,
     d_estimator_cache: DeceleratingEstimatorCache,
+    stretch_lut: StretchLut,
+    squash_lut: SquashLut,
 }
 
 impl LookUpTables {
@@ -32,10 +38,14 @@ impl LookUpTables {
         let d_estimator_lut = DeceleratingEstimatorLut::make_default();
         let d_estimator_cache =
             DeceleratingEstimatorCache::new(&d_estimator_lut);
+        let stretch_lut = StretchLut::new(false);
+        let squash_lut = SquashLut::new(&stretch_lut, false);
         LookUpTables {
             log2_lut: Log2Lut::new(),
             d_estimator_lut,
             d_estimator_cache,
+            stretch_lut,
+            squash_lut,
         }
     }
 
@@ -49,5 +59,13 @@ impl LookUpTables {
 
     pub fn d_estimator_cache(&self) -> &DeceleratingEstimatorCache {
         &self.d_estimator_cache
+    }
+
+    pub fn stretch_lut(&self) -> &StretchLut {
+        &self.stretch_lut
+    }
+
+    pub fn squash_lut(&self) -> &SquashLut {
+        &self.squash_lut
     }
 }
