@@ -29,8 +29,8 @@ impl Log2Lut {
             let half_input = FractOnlyU32::new(
                 ((input as u32) << 31 - Self::INDEX_BITS - 1) as u32, 31);
             let log2 = one_plus_log2_restricted(half_input);
-            let log2_scaled = log2.raw() >> 31 - Self::INDEX_BITS - 1;
-            let log2_scaled = (log2_scaled + 1) >> 1;
+            let log2_scaled = fix_u32::scaled_down(
+                log2.raw(), 31 - Self::INDEX_BITS);
             let index = input - (1 << Self::INDEX_BITS);
             let diff = log2_scaled - index as u32;
             assert!(diff <= 176);

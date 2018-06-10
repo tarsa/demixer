@@ -16,7 +16,7 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use bit::Bit;
-use fixed_point::{FixedPoint, FixU32, fix_u32};
+use fixed_point::{FixedPoint, fix_i64};
 use fixed_point::types::FractOnlyU32;
 use lut::estimator::*;
 
@@ -42,8 +42,9 @@ impl DeceleratingEstimator {
                 -> DeceleratingEstimator {
         assert!(FractOnlyU32::FRACTIONAL_BITS > Self::PREDICTION_BITS);
         let diff_bits = FractOnlyU32::FRACTIONAL_BITS - Self::PREDICTION_BITS;
-        let prediction = (prediction.raw() + (1 << (diff_bits - 1)))
-            >> diff_bits;
+        let prediction = prediction.raw();
+        assert_eq!(prediction & ((1 << diff_bits) - 1), 0);
+        let prediction = prediction >> diff_bits;
         let prediction =
             if prediction == 0 {
                 1
@@ -71,22 +72,20 @@ impl DeceleratingEstimator {
     }
 
     pub fn update(&mut self, value: Bit, lut: &DeceleratingEstimatorLut) {
-        let prediction = self.prediction();
+        let prediction_bits = FractOnlyU32::FRACTIONAL_BITS;
+        let factor_bits = FractOnlyU32::FRACTIONAL_BITS;
+        let prediction = self.prediction().raw();
         let count = self.usage_count();
         let factor = lut[count];
-        let prediction = match value {
-            Bit::Zero => {
-                let error = FractOnlyU32::ONE_UNSAFE.sub(&prediction);
-                let correction: FractOnlyU32 = fix_u32::mul(&error, &factor);
-                prediction.add(&correction)
-            }
-            Bit::One => {
-                let error = prediction;
-                let correction: FractOnlyU32 = fix_u32::mul(&error, &factor);
-                prediction.sub(&correction)
-            }
-        };
-        let count = (count + 1).min(Self::MAX_COUNT);
-        *self = Self::make(prediction, count);
+        let error = ((!value).to_i64() << prediction_bits) - prediction as i64;
+        let correction = error * factor.raw() as i64;
+        let mut prediction = ((prediction as i64) << factor_bits) + correction;
+        prediction -= 1i64 << (prediction_bits + factor_bits - 1);
+        prediction = fix_i64::scaled_down(
+            prediction, prediction_bits + factor_bits - Self::PREDICTION_BITS);
+        prediction += 1i64 << (Self::PREDICTION_BITS - 1);
+        let prediction = (prediction as u32) << Self::COUNT_BITS;
+        let count = (count + 1).min(Self::MAX_COUNT) as u32;
+        self.0 = prediction | count;
     }
 }

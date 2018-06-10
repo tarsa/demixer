@@ -32,7 +32,7 @@ impl SquashLut {
         let max_stretched_prob = -stretch_lut.stretch(
             StretchLut::minimum_accurately_mapped_input()).as_f64();
         assert!(max_stretched_prob > 0.0);
-        for index in 0..Self::ARRAY_SIZE {
+        for index in Self::ARRAY_SIZE / 2..Self::ARRAY_SIZE {
             let stretched_prob = StretchedProbD::new(
                 (index as i32 - Self::ARRAY_SIZE as i32 / 2) <<
                     (21 - Self::USED_FRACTIONAL_BITS), 21);
@@ -51,6 +51,9 @@ impl SquashLut {
             squash_lut[index] = actual;
         }
         if print { println!("max error = {:12.9}", max_error); }
+        for index in 0..Self::ARRAY_SIZE / 2 {
+            squash_lut[index] = squash_lut[Self::ARRAY_SIZE - index - 1].flip();
+        }
         SquashLut(squash_lut)
     }
 

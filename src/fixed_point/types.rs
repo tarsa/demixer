@@ -253,4 +253,9 @@ impl FixedPoint for StretchedProbD {
 
 impl StretchedProbD {
     pub const ABSOLUTE_LIMIT: i32 = 12;
+
+    pub const MAX: Self =
+        StretchedProbD(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS);
+    pub const MIN: Self =
+        StretchedProbD(-(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS));
 }

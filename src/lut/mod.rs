@@ -15,11 +15,13 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+pub mod apm;
 pub mod estimator;
 pub mod log2;
 pub mod squash;
 pub mod stretch;
 
+use self::apm::ApmWeightingLut;
 use self::estimator::*;
 use self::log2::Log2Lut;
 use self::squash::SquashLut;
@@ -31,21 +33,31 @@ pub struct LookUpTables {
     d_estimator_cache: DeceleratingEstimatorCache,
     stretch_lut: StretchLut,
     squash_lut: SquashLut,
+    apm_luts: [ApmWeightingLut;
+        LookUpTables::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS as usize + 1],
 }
 
 impl LookUpTables {
+    pub const APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS: u8 = 2;
+
     pub fn new() -> LookUpTables {
         let d_estimator_lut = DeceleratingEstimatorLut::make_default();
         let d_estimator_cache =
             DeceleratingEstimatorCache::new(&d_estimator_lut);
         let stretch_lut = StretchLut::new(false);
         let squash_lut = SquashLut::new(&stretch_lut, false);
+        let apm_luts = [
+            ApmWeightingLut::new(0, &squash_lut),
+            ApmWeightingLut::new(1, &squash_lut),
+            ApmWeightingLut::new(2, &squash_lut),
+        ];
         LookUpTables {
             log2_lut: Log2Lut::new(),
             d_estimator_lut,
             d_estimator_cache,
             stretch_lut,
             squash_lut,
+            apm_luts,
         }
     }
 
@@ -67,5 +79,11 @@ impl LookUpTables {
 
     pub fn squash_lut(&self) -> &SquashLut {
         &self.squash_lut
+    }
+
+    pub fn apm_lut(&self, stretched_fract_index_bits: u8) -> &ApmWeightingLut {
+        assert!(stretched_fract_index_bits <=
+            Self::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS);
+        &self.apm_luts[stretched_fract_index_bits as usize]
     }
 }

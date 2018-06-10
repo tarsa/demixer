@@ -21,8 +21,8 @@ use fixed_point::types::{
 };
 use super::log2::one_plus_log2_restricted;
 
-pub struct StretchLut([[StretchedProbD;
-    1 << StretchLut::IN_LEVEL_INDEX_BITS]; 1 << StretchLut::LEVELS_INDEX_BITS]);
+pub struct StretchLut([[StretchedProbD; 1usize <<
+    StretchLut::IN_LEVEL_INDEX_BITS]; 1usize << StretchLut::LEVELS_INDEX_BITS]);
 
 impl StretchLut {
     pub const LEVELS_INDEX_BITS: u8 = 3;
@@ -31,7 +31,7 @@ impl StretchLut {
     const LAST_IN_LEVEL: usize = (1 << Self::IN_LEVEL_INDEX_BITS) - 1;
 
     pub fn minimum_accurately_mapped_input() -> FractOnlyU32 {
-        FractOnlyU32::new(1 << (31 - 1 - Self::LAST_LEVEL as u8
+        FractOnlyU32::new(1u32 << (31 - 1 - Self::LAST_LEVEL as u8
             - Self::IN_LEVEL_INDEX_BITS), 31)
     }
 
@@ -102,7 +102,6 @@ impl StretchLut {
 
     /// Inverse of squash. Return d = ln(p/(1-p)). Also called 'logit'.
     pub fn stretch(&self, input: FractOnlyU32) -> StretchedProbD {
-        assert_ne!(input.raw(), 0);
         let half = FractOnlyU32::HALF;
         if input == half {
             return StretchedProbD::new_unchecked(0);
@@ -113,6 +112,7 @@ impl StretchLut {
             if flip { flipped } else { input }
         };
         let input = input.raw();
+        assert_ne!(input, 0);
         let leading_zeros = input.leading_zeros();
         let level = Self::LAST_LEVEL.min(leading_zeros as usize - 2);
         let shift =

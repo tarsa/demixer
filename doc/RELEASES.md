@@ -1,5 +1,12 @@
 # Releases
 
+### Version 0.8.0
+
+- Implemented probability refinement (APM/ SSE)
+  - probabilities are stretched and squashed during that process
+  - APM stands for AdaptiveProbabilityMap (structure used in this program)
+  - SSE stands for Secondary Symbol Estimation (alternative name for APM)
+
 ### Version 0.7.0
 
 - Added semi-stationary counters (probability estimators) to history sources

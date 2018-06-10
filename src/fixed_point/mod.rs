@@ -24,7 +24,7 @@ use fixed_point::types::Log2D;
 use lut::log2::Log2Lut;
 
 pub trait FixedPoint where Self: Sized {
-    type Raw: AsFloat + Copy + Debug;
+    type Raw: FloatConversions + Copy + Debug;
 
     fn raw(&self) -> Self::Raw;
     fn new_unchecked(raw: Self::Raw) -> Self;
@@ -41,12 +41,36 @@ pub trait FixedPoint where Self: Sized {
 
     const FRACTIONAL_BITS: u8;
 
-    fn as_f32(&self) -> f32 {
-        self.raw().into_f32() / 2f32.powi(Self::FRACTIONAL_BITS as i32)
+    fn from_f32(input: f32) -> Self { Self::from_f64(input as f64) }
+    fn as_f32(&self) -> f32 { self.as_f64() as f32 }
+
+    fn from_f64(input: f64) -> Self {
+        Self::new(
+            Self::Raw::from_f64(input * (1u64 << Self::FRACTIONAL_BITS) as f64),
+            Self::FRACTIONAL_BITS)
     }
 
     fn as_f64(&self) -> f64 {
-        self.raw().into_f64() / 2f64.powi(Self::FRACTIONAL_BITS as i32)
+        self.raw().into_f64() / (1u64 << Self::FRACTIONAL_BITS) as f64
+    }
+}
+
+pub mod fix_i16 {
+    use DO_CHECKS;
+
+    pub fn scaled_down(raw: i16, shift: u8) -> i16 {
+        if DO_CHECKS { assert_ne!(shift, 0); }
+        raw.saturating_add(raw.signum() << (shift - 1))
+            .max(i16::min_value() + 1) / (1 << shift)
+    }
+}
+
+pub mod fix_u16 {
+    use DO_CHECKS;
+
+    pub fn scaled_down(raw: u16, shift: u8) -> u16 {
+        if DO_CHECKS { assert_ne!(shift, 0); }
+        raw.saturating_add(1 << (shift - 1)) >> shift
     }
 }
 
@@ -66,8 +90,7 @@ pub trait FixI32: FixedPoint<Raw=i32> {
         let raw = self.raw();
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (raw.signum() << (bits_diff - 1))) / (1 << bits_diff),
-                   R::FRACTIONAL_BITS)
+            R::new(fix_i32::scaled_down(raw, bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
             if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
@@ -79,8 +102,7 @@ pub trait FixI32: FixedPoint<Raw=i32> {
         let raw = self.raw() as i64;
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (raw.signum() << (bits_diff - 1))) / (1 << bits_diff),
-                   R::FRACTIONAL_BITS)
+            R::new(fix_i64::scaled_down(raw, bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
             if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
@@ -117,15 +139,20 @@ pub trait FixI32: FixedPoint<Raw=i32> {
 
 pub mod fix_i32 {
     use DO_CHECKS;
-    use super::{FixI32, FixI64};
+    use super::{FixI32, FixI64, fix_i64};
+
+    pub fn scaled_down(raw: i32, shift: u8) -> i32 {
+        if DO_CHECKS { assert_ne!(shift, 0); }
+        raw.saturating_add(raw.signum() << (shift - 1))
+            .max(i32::min_value() + 1) / (1 << shift)
+    }
 
     pub fn mul<A: FixI32, B: FixI32, R: FixI32>(a: &A, b: &B) -> R {
         let mul_raw = a.raw() as i64 * b.raw() as i64;
         let total_fract_bits = A::FRACTIONAL_BITS + B::FRACTIONAL_BITS;
         if total_fract_bits > R::FRACTIONAL_BITS {
             let bits_diff = total_fract_bits - R::FRACTIONAL_BITS;
-            let result_wide = (mul_raw + (mul_raw.signum() << (bits_diff - 1)))
-                / (1 << bits_diff);
+            let result_wide = fix_i64::scaled_down(mul_raw, bits_diff);
             if DO_CHECKS {
                 assert_eq!((result_wide as i32) as i64, result_wide);
             }
@@ -146,8 +173,7 @@ pub mod fix_i32 {
         let total_fract_bits = A::FRACTIONAL_BITS + B::FRACTIONAL_BITS;
         if total_fract_bits > R::FRACTIONAL_BITS {
             let bits_diff = total_fract_bits - R::FRACTIONAL_BITS;
-            R::new((mul_raw + (mul_raw.signum() << (bits_diff - 1)))
-                       / (1 << bits_diff), R::FRACTIONAL_BITS)
+            R::new(fix_i64::scaled_down(mul_raw, bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - total_fract_bits;
             if DO_CHECKS {
@@ -174,8 +200,7 @@ pub trait FixU32: FixedPoint<Raw=u32> {
         let raw = self.raw();
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (1 << (bits_diff - 1))) >> bits_diff,
-                   R::FRACTIONAL_BITS)
+            R::new(fix_u32::scaled_down(raw, bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
             if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
@@ -187,8 +212,7 @@ pub trait FixU32: FixedPoint<Raw=u32> {
         let raw = self.raw() as u64;
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (1 << (bits_diff - 1))) >> bits_diff,
-                   R::FRACTIONAL_BITS)
+            R::new(fix_u64::scaled_down(raw, bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
             if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
@@ -233,14 +257,19 @@ pub trait FixU32: FixedPoint<Raw=u32> {
 
 pub mod fix_u32 {
     use DO_CHECKS;
-    use super::{FixU32, FixU64};
+    use super::{FixU32, FixU64, fix_u64};
+
+    pub fn scaled_down(raw: u32, shift: u8) -> u32 {
+        if DO_CHECKS { assert_ne!(shift, 0); }
+        raw.saturating_add(1 << (shift - 1)) >> shift
+    }
 
     pub fn mul<A: FixU32, B: FixU32, R: FixU32>(a: &A, b: &B) -> R {
         let mul_raw = a.raw() as u64 * b.raw() as u64;
         let total_fract_bits = A::FRACTIONAL_BITS + B::FRACTIONAL_BITS;
         if total_fract_bits > R::FRACTIONAL_BITS {
             let bits_diff = total_fract_bits - R::FRACTIONAL_BITS;
-            let result_wide = (mul_raw + (1 << (bits_diff - 1))) >> bits_diff;
+            let result_wide = fix_u64::scaled_down(mul_raw, bits_diff);
             if DO_CHECKS {
                 assert_eq!((result_wide as u32) as u64, result_wide);
             }
@@ -261,8 +290,7 @@ pub mod fix_u32 {
         let total_fract_bits = A::FRACTIONAL_BITS + B::FRACTIONAL_BITS;
         if total_fract_bits > R::FRACTIONAL_BITS {
             let bits_diff = total_fract_bits - R::FRACTIONAL_BITS;
-            R::new((mul_raw + (1 << (bits_diff - 1))) >> bits_diff,
-                   R::FRACTIONAL_BITS)
+            R::new(fix_u64::scaled_down(mul_raw, bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - total_fract_bits;
             if DO_CHECKS {
@@ -289,8 +317,7 @@ pub trait FixI64: FixedPoint<Raw=i64> {
         let raw = self.raw();
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (raw.signum() << (bits_diff - 1))) / (1 << bits_diff),
-                   R::FRACTIONAL_BITS)
+            R::new(fix_i64::scaled_down(raw, bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
             if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
@@ -325,6 +352,16 @@ pub trait FixI64: FixedPoint<Raw=i64> {
     }
 }
 
+pub mod fix_i64 {
+    use DO_CHECKS;
+
+    pub fn scaled_down(raw: i64, shift: u8) -> i64 {
+        if DO_CHECKS { assert_ne!(shift, 0); }
+        raw.saturating_add(raw.signum() << (shift - 1))
+            .max(i64::min_value() + 1) / (1 << shift)
+    }
+}
+
 pub trait FixU64: FixedPoint<Raw=u64> {
     const TOTAL_BITS: u8 = 64;
     const INTEGRAL_BITS: u8 = Self::TOTAL_BITS - Self::FRACTIONAL_BITS;
@@ -341,8 +378,7 @@ pub trait FixU64: FixedPoint<Raw=u64> {
         let raw = self.raw();
         if Self::FRACTIONAL_BITS > R::FRACTIONAL_BITS {
             let bits_diff = Self::FRACTIONAL_BITS - R::FRACTIONAL_BITS;
-            R::new((raw + (1 << (bits_diff - 1))) >> bits_diff,
-                   R::FRACTIONAL_BITS)
+            R::new(fix_u64::scaled_down(raw, bits_diff), R::FRACTIONAL_BITS)
         } else {
             let bits_diff = R::FRACTIONAL_BITS - Self::FRACTIONAL_BITS;
             if DO_CHECKS { assert_eq!(raw << bits_diff >> bits_diff, raw); }
@@ -385,6 +421,15 @@ pub trait FixU64: FixedPoint<Raw=u64> {
     }
 }
 
+pub mod fix_u64 {
+    use DO_CHECKS;
+
+    pub fn scaled_down(raw: u64, shift: u8) -> u64 {
+        if DO_CHECKS { assert_ne!(shift, 0); }
+        raw.saturating_add(1 << (shift - 1)) >> shift
+    }
+}
+
 impl<T: FixedPoint<Raw=i32>> FixI32 for T {}
 
 impl<T: FixedPoint<Raw=u32>> FixU32 for T {}
@@ -393,27 +438,37 @@ impl<T: FixedPoint<Raw=i64>> FixI64 for T {}
 
 impl<T: FixedPoint<Raw=u64>> FixU64 for T {}
 
-pub trait AsFloat {
+pub trait FloatConversions {
+    fn from_f32(input: f32) -> Self;
+    fn from_f64(input: f64) -> Self;
     fn into_f32(self) -> f32;
     fn into_f64(self) -> f64;
 }
 
-impl AsFloat for i32 {
+impl FloatConversions for i32 {
+    fn from_f32(input: f32) -> Self { input as Self }
+    fn from_f64(input: f64) -> Self { input as Self }
     fn into_f32(self) -> f32 { self as f32 }
     fn into_f64(self) -> f64 { self as f64 }
 }
 
-impl AsFloat for u32 {
+impl FloatConversions for u32 {
+    fn from_f32(input: f32) -> Self { input as Self }
+    fn from_f64(input: f64) -> Self { input as Self }
     fn into_f32(self) -> f32 { self as f32 }
     fn into_f64(self) -> f64 { self as f64 }
 }
 
-impl AsFloat for i64 {
+impl FloatConversions for i64 {
+    fn from_f32(input: f32) -> Self { input as Self }
+    fn from_f64(input: f64) -> Self { input as Self }
     fn into_f32(self) -> f32 { self as f32 }
     fn into_f64(self) -> f64 { self as f64 }
 }
 
-impl AsFloat for u64 {
+impl FloatConversions for u64 {
+    fn from_f32(input: f32) -> Self { input as Self }
+    fn from_f64(input: f64) -> Self { input as Self }
     fn into_f32(self) -> f32 { self as f32 }
     fn into_f64(self) -> f64 { self as f64 }
 }

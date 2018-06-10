@@ -18,7 +18,7 @@
 extern crate demixer;
 
 use demixer::PRINT_DEBUG;
-use demixer::fixed_point::FixedPoint;
+use demixer::fixed_point::{FixedPoint, FixI32};
 use demixer::fixed_point::types::{FractOnlyU32, StretchedProbD};
 use demixer::lut::squash::SquashLut;
 use demixer::lut::stretch::StretchLut;
@@ -55,8 +55,7 @@ fn stretch_lut_is_correct() {
         for step in 0..intervals + 1 {
             let input64 = stop * (step as f64 / intervals as f64) +
                 start * ((intervals - step) as f64 / intervals as f64);
-            let input = FractOnlyU32::new(
-                (input64 * (1u32 << 31) as f64) as u32, 31);
+            let input = FractOnlyU32::from_f64(input64);
             let expected = (input64 / (1.0 - input64)).ln();
             let actual = lut.stretch(input).as_f64();
             if PRINT_DEBUG {
@@ -104,9 +103,7 @@ fn squash_lut_is_correct() {
         for step in 0..intervals + 1 {
             let input64 = stop * (step as f64 / intervals as f64) +
                 start * ((intervals - step) as f64 / intervals as f64);
-            let bits = StretchedProbD::FRACTIONAL_BITS;
-            let input = StretchedProbD::new(
-                (input64 * (1i32 << bits) as f64) as i32, bits);
+            let input = StretchedProbD::from_f64(input64);
             let expected = 1.0 / (1.0 + (-input64).exp());
             let actual = lut.squash(input).as_f64();
             if PRINT_DEBUG {
@@ -138,8 +135,7 @@ fn squash_and_stretch_composed_are_close_to_identity() {
         for step in 0..intervals + 1 {
             let input64 = stop * (step as f64 / intervals as f64) +
                 start * ((intervals - step) as f64 / intervals as f64);
-            let input = FractOnlyU32::new(
-                (input64 * (1u32 << 31) as f64) as u32, 31);
+            let input = FractOnlyU32::from_f64(input64);
             let stretched_direct = (input64 / (1.0 - input64)).ln();
             let squashed_direct = 1.0 / (1.0 + (-stretched_direct).exp());
             let stretched = stretch_lut.stretch(input);
@@ -153,6 +149,51 @@ fn squash_and_stretch_composed_are_close_to_identity() {
             }
             assert!((squashed - input64).abs() < accuracy, "diff = {}",
                     (squashed - input64).abs());
+        }
+    }
+}
+
+#[test]
+fn stretch_is_symmetric() {
+    let lut = StretchLut::new(PRINT_DEBUG);
+    for &(start, stop, intervals) in [
+        (0.2500, 0.5000, 1 << StretchLut::IN_LEVEL_INDEX_BITS),
+        (0.2500, 0.5000, 100),
+        (0.4900, 0.5000, 1000),
+        (0.0100, 0.1000, 9999),
+        (0.0001, 0.0002, 1500),
+    ].iter() {
+        for step in 0..intervals + 1 {
+            let input64 = stop * (step as f64 / intervals as f64) +
+                start * ((intervals - step) as f64 / intervals as f64);
+            let a_sq = FractOnlyU32::from_f64(input64);
+            let b_sq = a_sq.flip();
+            let a_st = lut.stretch(a_sq);
+            let b_st = lut.stretch(b_sq);
+            assert_eq!(a_st, b_st.neg());
+        }
+    }
+}
+
+#[test]
+fn squash_is_symmetric() {
+    let stretch_lut = StretchLut::new(false);
+    let lut = SquashLut::new(&stretch_lut, PRINT_DEBUG);
+    for &(start, stop, intervals) in [
+        (-01.0, 001.0, 100),
+        (-11.0, -09.0, 100),
+        (011.0, 009.0, 100),
+        (-08.0, -05.0, 9999),
+        (008.0, 005.0, 9999),
+    ].iter() {
+        for step in 0..intervals + 1 {
+            let input64 = stop * (step as f64 / intervals as f64) +
+                start * ((intervals - step) as f64 / intervals as f64);
+            let a_st = StretchedProbD::from_f64(input64);
+            let b_st = a_st.neg();
+            let a_sq = lut.squash(a_st);
+            let b_sq = lut.squash(b_st);
+            assert_eq!(a_sq, b_sq.flip());
         }
     }
 }

@@ -53,6 +53,6 @@ impl FixedSpeedEstimator {
 
 impl Default for FixedSpeedEstimator {
     fn default() -> FixedSpeedEstimator {
-        FixedSpeedEstimator(1 << (Self::BITS - 1))
+        FixedSpeedEstimator(1u16 << (Self::BITS - 1))
     }
 }

@@ -25,6 +25,7 @@ use demixer::fixed_point::{FixedPoint, FixI32, FixU32, FixI64};
 use demixer::fixed_point::types::Log2Q;
 use demixer::lut::estimator::DeceleratingEstimatorLut;
 use demixer::lut::log2::Log2Lut;
+use demixer::random::MersenneTwister;
 
 #[test]
 fn decelerating_estimator_is_good() {
@@ -121,4 +122,31 @@ fn check_fixed_speed_estimator_single(probability: f64,
     assert!(total_cost.as_f64() / ideal_cost - 1.0 < max_overhead,
             "{} {} {}, {} {} {}", total_cost.as_f64(), ideal_cost, max_overhead,
             probability, real_probability, estimator.prediction().as_f64());
+}
+
+#[test]
+fn decelerating_estimator_is_symmetric() {
+    let lut = DeceleratingEstimatorLut::make_default();
+    let mut a_estimator = DeceleratingEstimator::new();
+    let mut b_estimator = DeceleratingEstimator::new();
+    let mut prng = MersenneTwister::default();
+    for _ in 0..100_000 {
+        assert_eq!(a_estimator.prediction(), b_estimator.prediction().flip());
+        let input_bit: Bit = (prng.next_int64() % 2 == 0).into();
+        a_estimator.update(input_bit, &lut);
+        b_estimator.update(!input_bit, &lut);
+    }
+}
+
+#[test]
+fn fixed_speed_estimator_is_symmetric() {
+    let mut a_estimator = FixedSpeedEstimator::default();
+    let mut b_estimator = FixedSpeedEstimator::default();
+    let mut prng = MersenneTwister::default();
+    for _ in 0..100_000 {
+        assert_eq!(a_estimator.prediction(), b_estimator.prediction().flip());
+        let input_bit: Bit = (prng.next_int64() % 2 == 0).into();
+        a_estimator.update(input_bit);
+        b_estimator.update(!input_bit);
+    }
 }

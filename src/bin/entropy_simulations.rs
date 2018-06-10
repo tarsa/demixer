@@ -27,12 +27,12 @@ use demixer::lut::log2::Log2Lut;
 
 fn main() {
     let log_lut = Log2Lut::new();
-    for x in -16..16 + 1 {
+    for x in -18..18 + 1 {
         let power = (-x as f64) / 2.0;
         println!("power: {}", power);
         let probability = 1f64 / (1f64 + power.exp());
         for &single_run_length in [1, 2, 3, 5, 8, 13, 21, 34, 55, 89,
-            100, 200, 300, 1000, 2000].iter() {
+            100, 200, 300, 1000, 2000, 10_000].iter() {
             println!("single run length = {}", single_run_length);
             for &(factor, addend) in [(1, 2), (1, 3), (2, 2), (2, 3)].iter() {
                 print!("LUT: factor = {}, addend = {} ", factor, addend);
