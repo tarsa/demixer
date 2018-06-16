@@ -25,10 +25,8 @@ use PRINT_DEBUG;
 use bit::Bit;
 use estimators::decelerating::DeceleratingEstimator;
 use lut::LookUpTables;
-use super::{
-    CollectedContextStates, ContextState, HistorySource,
-    make_bit_run_history, updated_bit_history,
-};
+use super::{CollectedContextStates, ContextState, HistorySource};
+use super::state::HistoryStateFactory;
 use super::window::{InputWindow, WindowIndex};
 use self::context::{ActiveContexts, Context};
 use self::direction::Direction;
@@ -582,8 +580,8 @@ impl<'a> Tree<'a> {
             !bit,
             DeceleratingEstimator::MAX_COUNT.min(incoming_edge_visits_count));
         probability_estimator.update(bit, luts.d_estimator_lut());
-        let bit_history = updated_bit_history(make_bit_run_history(
-            incoming_edge_visits_count, !bit), bit);
+        let bit_history = luts.history_state_factory()
+            .for_new_node(bit, incoming_edge_visits_count);
         Node::new(text_start,
                   probability_estimator,
                   context_order * 8 + 7 - bit_index,
@@ -617,9 +615,8 @@ impl<'a> Tree<'a> {
                     .min(self.window.size() - current_context_order - 1)
                     as u16);
             probability_estimator.update(bit, luts.d_estimator_lut());
-            let bit_history = updated_bit_history(
-                make_bit_run_history((self.window.size() - current_context_order
-                    - 1) as u16, !bit), bit);
+            let bit_history = luts.history_state_factory().for_new_node(
+                bit, (self.window.size() - current_context_order - 1) as u16);
             let repeated_edge_count =
                 self.window.index_diff(suffix_start, self.window.start()).min(
                     ContextState::MAX_OCCURRENCE_COUNT as usize) as u16;

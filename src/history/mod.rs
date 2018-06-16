@@ -17,12 +17,14 @@
  */
 pub mod naive;
 pub mod fat_map;
+pub mod state;
 pub mod tree;
 pub mod window;
 
 use bit::Bit;
 use estimators::decelerating::DeceleratingEstimator;
 use lut::LookUpTables;
+use self::state::{TheHistoryState, HistoryState, HistoryStateFactory};
 use self::window::WindowIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -35,8 +37,7 @@ pub enum ContextState {
     ForNode {
         last_occurrence_index: WindowIndex,
         probability_estimator: DeceleratingEstimator,
-        // TODO wrap in BitHistory
-        bit_history: u16,
+        bit_history: TheHistoryState,
     },
 }
 
@@ -53,10 +54,11 @@ impl ContextState {
         }
     }
 
-    pub fn bit_history(&self) -> u16 {
+    pub fn bit_history(&self, luts: &LookUpTables) -> TheHistoryState {
         match self {
             &ContextState::ForEdge { occurrence_count, repeated_bit, .. } =>
-                make_bit_run_history(occurrence_count, repeated_bit),
+                luts.history_state_factory()
+                    .for_bit_run(repeated_bit, occurrence_count),
             &ContextState::ForNode { bit_history, .. } =>
                 bit_history,
         }
@@ -84,8 +86,7 @@ impl ContextState {
                 ContextState::ForNode {
                     last_occurrence_index: new_occurrence_index,
                     probability_estimator,
-                    bit_history: updated_bit_history(
-                        bit_history, bit_in_context),
+                    bit_history: bit_history.updated(bit_in_context),
                 }
             }
             &ContextState::ForEdge {
@@ -105,10 +106,8 @@ impl ContextState {
                             repeated_bit, occurrence_count);
                     d_estimator.update(
                         bit_in_context, luts.d_estimator_lut());
-                    let bit_history = make_bit_run_history(
-                        occurrence_count, repeated_bit);
-                    let bit_history =
-                        updated_bit_history(bit_history, bit_in_context);
+                    let bit_history = luts.history_state_factory().for_new_node(
+                        bit_in_context, occurrence_count);
                     ContextState::ForNode {
                         last_occurrence_index: new_occurrence_index,
                         probability_estimator: d_estimator,
@@ -155,14 +154,4 @@ pub trait HistorySource<'a> {
         &self, context_states: &mut CollectedContextStates);
 
     fn process_input_bit(&mut self, input_bit: Bit);
-}
-
-fn make_bit_run_history(uncapped_length: u16, repeated_bit: Bit) -> u16 {
-    let length = 10.min(uncapped_length);
-    let bit = repeated_bit.to_u16();
-    (1 << length) | (((1 << length) - 1) * bit)
-}
-
-fn updated_bit_history(bit_history: u16, next_bit: Bit) -> u16 {
-    ((bit_history << 1) & 2047) | next_bit.to_u16() | (bit_history & 1024)
 }

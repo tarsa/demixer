@@ -19,7 +19,8 @@ use core::fmt;
 
 use bit::Bit;
 use estimators::decelerating::DeceleratingEstimator;
-use history::{ContextState, updated_bit_history};
+use history::ContextState;
+use history::state::{TheHistoryState, HistoryState};
 use history::window::WindowIndex;
 use lut::estimator::DeceleratingEstimatorLut;
 use super::direction::Direction;
@@ -30,7 +31,7 @@ pub struct Node {
     pub children: NodeChildren,
     pub text_start: u32,
     probability_estimator: DeceleratingEstimator,
-    history_state: u16,
+    history_state: TheHistoryState,
     depth: u16,
     left_count: u16,
     right_count: u16,
@@ -41,7 +42,7 @@ impl Node {
         children: NodeChildren::INVALID,
         text_start: 0,
         probability_estimator: DeceleratingEstimator::INVALID,
-        history_state: 0,
+        history_state: TheHistoryState::INVALID,
         depth: 0,
         left_count: 0,
         right_count: 0,
@@ -49,13 +50,13 @@ impl Node {
 
     pub fn new(text_start: WindowIndex,
                probability_estimator: DeceleratingEstimator, depth: usize,
-               left_count: u16, right_count: u16, history_state: u16,
-               children: NodeChildren) -> Node {
+               left_count: u16, right_count: u16,
+               history_state: TheHistoryState, children: NodeChildren) -> Node {
         assert!((text_start.raw() as u64) < 1u64 << 31);
         assert!((depth as u64) < 1u64 << 16);
         assert!((left_count as u64) < 1u64 << 16);
         assert!((right_count as u64) < 1u64 << 16);
-        assert!((history_state as u64) < 1u64 << 16);
+        assert!(history_state.is_valid());
         Node {
             children,
             text_start: text_start.raw() as u32,
@@ -92,7 +93,7 @@ impl Node {
         self.right_count
     }
 
-    pub fn history_state(&self) -> u16 {
+    pub fn history_state(&self) -> TheHistoryState {
         self.history_state
     }
 
@@ -109,7 +110,7 @@ impl Node {
                 ContextState::MAX_OCCURRENCE_COUNT.min(self.right_count + 1),
         }
         let bit: Bit = direction.into();
-        self.history_state = updated_bit_history(self.history_state, bit);
+        self.history_state = self.history_state.updated(bit);
         self.probability_estimator.update(bit, &lut);
     }
 }
@@ -117,7 +118,8 @@ impl Node {
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}'{}'{:b}'l({})r({})",
-               self.text_start(), self.depth(), self.history_state(),
+               self.text_start(), self.depth(),
+               self.history_state().last_bits(),
                self.left_count(), self.right_count())
     }
 }

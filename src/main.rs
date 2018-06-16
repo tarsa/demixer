@@ -24,6 +24,7 @@ use demixer::MAX_ORDER;
 use demixer::history::{CollectedContextStates, HistorySource};
 use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
+use demixer::history::state::HistoryState;
 use demixer::history::tree::TreeHistorySource;
 use demixer::history::window::get_bit;
 use demixer::lut::LookUpTables;
@@ -73,10 +74,11 @@ fn print_bit_histories<'a, Source: HistorySource<'a>>(input: &[u8],
             history_source.gather_history_states(&mut collected_states);
             if collected_states.items().len() > 0 {
                 print!("{}: ", bit_index);
-                print!("{:x}", collected_states.items()[0].bit_history());
-                for i in 1..collected_states.items().len() {
+                print!("{:x}", collected_states.items()[0]
+                    .bit_history(luts).last_bits());
+                for item in collected_states.items()[1..].iter() {
                     print!(", ");
-                    print!("{:x}", collected_states.items()[i].bit_history());
+                    print!("{:x}", item.bit_history(luts).last_bits());
                 }
                 println!();
             }
