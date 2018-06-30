@@ -24,7 +24,6 @@ use lut::squash::SquashLut;
 
 pub struct AdaptiveProbabilityMap {
     mappings: Vec<FractOnlyU32>,
-    // PAQ8 default = 1
     stretched_fract_index_bits: u8,
     contexts_number: usize,
     saved_left_context_index: i32,
@@ -32,6 +31,9 @@ pub struct AdaptiveProbabilityMap {
 }
 
 impl AdaptiveProbabilityMap {
+    /// PAQ8 default:
+    ///
+    /// stretched_fract_index_bits = 1
     pub fn new(contexts_number: usize, stretched_fract_index_bits: u8,
                squash_lut: &SquashLut) -> Self {
         let single_mapping_size =

@@ -252,10 +252,65 @@ impl FixedPoint for StretchedProbD {
 }
 
 impl StretchedProbD {
+    pub const ZERO: Self = StretchedProbD(0);
+
     pub const ABSOLUTE_LIMIT: i32 = 12;
 
     pub const MAX: Self =
         StretchedProbD(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS);
     pub const MIN: Self =
         StretchedProbD(-(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS));
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StretchedProbQ(i64);
+
+impl FixedPoint for StretchedProbQ {
+    type Raw = i64;
+    fn raw(&self) -> i64 { self.0 }
+    fn new_unchecked(raw: i64) -> Self { StretchedProbQ(raw) }
+
+    const FRACTIONAL_BITS: u8 = 40;
+}
+
+impl StretchedProbQ {
+    pub const ZERO: Self = StretchedProbQ(0);
+
+    pub const ABSOLUTE_LIMIT: i64 = StretchedProbD::ABSOLUTE_LIMIT as i64;
+
+    pub const MAX: Self =
+        StretchedProbQ(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS);
+    pub const MIN: Self =
+        StretchedProbQ(-(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS));
+
+    pub fn clamped(self) -> Self {
+        self.max(Self::MIN).min(Self::MAX)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MixerWeight(i32);
+
+impl FixedPoint for MixerWeight {
+    type Raw = i32;
+    fn raw(&self) -> i32 { self.0 }
+    fn new_unchecked(raw: i32) -> Self { MixerWeight(raw) }
+
+    const FRACTIONAL_BITS: u8 = 21;
+}
+
+impl MixerWeight {
+    pub const ZERO: Self = MixerWeight(0);
+    pub const ONE: Self = MixerWeight(1i32 << Self::FRACTIONAL_BITS);
+
+    pub const ABSOLUTE_LIMIT: i32 = 8;
+
+    pub const MAX: Self =
+        MixerWeight(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS);
+    pub const MIN: Self =
+        MixerWeight(-(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS));
+
+    pub fn clamped(self) -> Self {
+        self.max(Self::MIN).min(Self::MAX)
+    }
 }
