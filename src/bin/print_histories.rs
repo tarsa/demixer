@@ -15,7 +15,6 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-extern crate core;
 extern crate demixer;
 
 use std::io::prelude::*;
@@ -30,8 +29,6 @@ use demixer::history::window::get_bit;
 use demixer::lut::LookUpTables;
 
 fn main() {
-    print_banner();
-
     let args: Vec<String> = std::env::args().collect();
     let history_source_type: &str = args.get(1).expect("provide type");
     let file_name = args.get(2).expect("provide file name");
@@ -53,13 +50,6 @@ fn main() {
         _ =>
             panic!("unrecognized history source type!")
     }
-}
-
-fn print_banner() {
-    eprintln!("demixer - file compressor aimed at high compression ratios");
-    eprint!("Copyright (C) 2018  Piotr Tarsa ");
-    eprintln!(" https://github.com/tarsa )");
-    eprintln!();
 }
 
 fn print_bit_histories<'a, Source: HistorySource<'a>>(input: &[u8],
