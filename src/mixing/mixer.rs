@@ -17,6 +17,7 @@
  */
 use DO_CHECKS;
 use bit::Bit;
+use estimators::decelerating::DeceleratingEstimator;
 use fixed_point::{FixedPoint, FixI32, fix_i32, FixU32, FixI64};
 use fixed_point::types::{
     FractOnlyI32, FractOnlyU32, StretchedProbD, StretchedProbQ, MixerWeight,
@@ -24,8 +25,7 @@ use fixed_point::types::{
 use lut::estimator::DeceleratingEstimatorLut;
 use lut::squash::SquashLut;
 
-const UPDATE_COUNT_INITIAL: u16 = 10;
-const UPDATE_COUNT_LIMIT: u16 = 1000;
+const UPDATE_FACTOR_INDEX_LIMIT: u16 = DeceleratingEstimator::MAX_COUNT;
 
 fn fixed_update_factor() -> FractOnlyI32 {
     FractOnlyI32::new(1_000_000_000, 31)
@@ -81,10 +81,11 @@ pub trait Mixer where Self: MixerData {
 
 
     fn update_and_reset(&mut self, input_bit: Bit, mix_result_sq: FractOnlyU32,
+                        max_update_factor_index: u16,
                         d_estimator_lut: &DeceleratingEstimatorLut) {
         assert_eq!(self.common().inputs_mask, (1u32 << self.size()) - 1);
         let dynamic_update_factor = FractOnlyI32::new(
-            d_estimator_lut[self.common().update_count].raw() as i32, 31);
+            d_estimator_lut[update_factor_index(self)].raw() as i32, 31);
         let update_factor: FractOnlyI32 = fix_i32::mul(
             &fixed_update_factor(), &dynamic_update_factor);
         match input_bit {
@@ -113,10 +114,16 @@ pub trait Mixer where Self: MixerData {
                 }
             }
         }
-        self.common_mut().update_count =
-            UPDATE_COUNT_LIMIT.min(self.common().update_count + 1);
+        assert!(update_factor_index(self) <= max_update_factor_index);
+        assert!(max_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
+        self.common_mut().update_factor_index =
+            UPDATE_FACTOR_INDEX_LIMIT.min(update_factor_index(self) + 1);
         self.common_mut().inputs_mask = 0;
     }
+}
+
+fn update_factor_index<T: Mixer>(this: &T) -> u16 {
+    this.common().update_factor_index
 }
 
 impl<T: MixerData> Mixer for T {}
@@ -147,14 +154,14 @@ impl MixerInput {
 
 pub struct MixerCommon {
     inputs_mask: u32,
-    update_count: u16,
+    update_factor_index: u16,
 }
 
 impl MixerCommon {
-    fn new() -> Self {
+    fn new(initial_update_factor_index: u16) -> Self {
         MixerCommon {
             inputs_mask: 0,
-            update_count: UPDATE_COUNT_INITIAL,
+            update_factor_index: initial_update_factor_index,
         }
     }
 }
@@ -179,19 +186,21 @@ pub struct MixerN {
 }
 
 impl MixerN {
-    pub fn new(size: usize, neutral: bool) -> Self {
+    pub fn new(size: usize, initial_update_factor_index: u16,
+               neutral: bool) -> Self {
         assert!(size <= 30);
-        let mut result: Self = Self::new_neutral(size);
+        let mut result: Self =
+            Self::new_neutral(size, initial_update_factor_index);
         assert_eq!(result.inputs().len(), size);
         initialize_weights(&mut result, neutral);
         result
     }
 
-    pub fn new_neutral(size: usize) -> Self {
+    pub fn new_neutral(size: usize, initial_update_factor_index: u16) -> Self {
         assert!(size <= 30);
         MixerN {
             inputs: MixerInput::new_array_neutral(size),
-            common: MixerCommon::new(),
+            common: MixerCommon::new(initial_update_factor_index),
         }
     }
 }
@@ -206,13 +215,13 @@ impl MixerData for MixerN {
 
 pub trait FixedSizeMixer where Self: MixerData {
     const SIZE: usize;
-    fn new(neutral: bool) -> Self {
-        let mut result: Self = Self::new_neutral();
+    fn new(initial_update_factor_index: u16, neutral: bool) -> Self {
+        let mut result: Self = Self::new_neutral(initial_update_factor_index);
         assert_eq!(result.inputs().len(), Self::SIZE);
         initialize_weights(&mut result, neutral);
         result
     }
-    fn new_neutral() -> Self;
+    fn new_neutral(initial_update_factor_index: u16) -> Self;
 }
 
 pub struct Mixer2 {
@@ -222,9 +231,12 @@ pub struct Mixer2 {
 
 impl FixedSizeMixer for Mixer2 {
     const SIZE: usize = 2;
-    fn new_neutral() -> Self {
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
         let n = || MixerInput::NEUTRAL;
-        Mixer2 { inputs: [n(), n()], common: MixerCommon::new() }
+        Mixer2 {
+            inputs: [n(), n()],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
     }
 }
 
@@ -243,9 +255,12 @@ pub struct Mixer3 {
 
 impl FixedSizeMixer for Mixer3 {
     const SIZE: usize = 3;
-    fn new_neutral() -> Self {
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
         let n = || MixerInput::NEUTRAL;
-        Mixer3 { inputs: [n(), n(), n()], common: MixerCommon::new() }
+        Mixer3 {
+            inputs: [n(), n(), n()],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
     }
 }
 
@@ -264,9 +279,12 @@ pub struct Mixer4 {
 
 impl FixedSizeMixer for Mixer4 {
     const SIZE: usize = 4;
-    fn new_neutral() -> Self {
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
         let n = || MixerInput::NEUTRAL;
-        Mixer4 { inputs: [n(), n(), n(), n()], common: MixerCommon::new() }
+        Mixer4 {
+            inputs: [n(), n(), n(), n()],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
     }
 }
 
@@ -285,9 +303,12 @@ pub struct Mixer5 {
 
 impl FixedSizeMixer for Mixer5 {
     const SIZE: usize = 5;
-    fn new_neutral() -> Self {
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
         let n = || MixerInput::NEUTRAL;
-        Mixer5 { inputs: [n(), n(), n(), n(), n()], common: MixerCommon::new() }
+        Mixer5 {
+            inputs: [n(), n(), n(), n(), n()],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
     }
 }
 

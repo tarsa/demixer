@@ -31,32 +31,32 @@ use demixer::random::MersenneTwister;
 
 #[test]
 fn mixers_pass_self_checks() {
-    MixerN::new(30, false);
-    Mixer2::new(false);
-    Mixer3::new(false);
-    Mixer4::new(false);
-    Mixer5::new(false);
+    MixerN::new(30, 10, false);
+    Mixer2::new(10, false);
+    Mixer3::new(10, false);
+    Mixer4::new(10, false);
+    Mixer5::new(10, false);
 }
 
 #[test]
 fn mixing_converges_to_real_probability() {
-    mixer_converges_to_real_probability(|| MixerN::new(1, false), &[
+    mixer_converges_to_real_probability(|| MixerN::new(1, 10, false), &[
         (&[0.2], 0.5),
         (&[0.1], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer2::new(false), &[
+    mixer_converges_to_real_probability(|| Mixer2::new(10, false), &[
         (&[0.2, 0.9], 0.5),
         (&[0.1, 0.99], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer3::new(false), &[
+    mixer_converges_to_real_probability(|| Mixer3::new(10, false), &[
         (&[0.2, 0.9, 0.7], 0.5),
         (&[0.1, 0.99, 0.9], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer4::new(false), &[
+    mixer_converges_to_real_probability(|| Mixer4::new(10, false), &[
         (&[0.2, 0.9, 0.7, 0.1], 0.5),
         (&[0.1, 0.99, 0.9, 0.01], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer5::new(false), &[
+    mixer_converges_to_real_probability(|| Mixer5::new(10, false), &[
         (&[0.2, 0.9, 0.7, 0.1, 0.5], 0.5),
         (&[0.1, 0.99, 0.9, 0.01, 0.5], 0.01),
     ], 0.01);
@@ -98,7 +98,8 @@ fn mixer_converges_to_real_probability<Mxr: Mixer>(
                 let (result_sq, _) = mixer.mix_all(&squash_lut);
                 let input_bit: Bit =
                     (flipped ^ (prng.next_real2() >= real_freq)).into();
-                mixer.update_and_reset(input_bit, result_sq, &estimator_lut);
+                mixer.update_and_reset(
+                    input_bit, result_sq, 1000, &estimator_lut);
                 if i >= warmup_iterations {
                     match input_bit {
                         Bit::Zero =>
@@ -134,19 +135,19 @@ fn mixer_converges_to_real_probability<Mxr: Mixer>(
 
 #[test]
 fn mixing_is_symmetric() {
-    mixer_is_symmetric(|| MixerN::new(1, true), &[
+    mixer_is_symmetric(|| MixerN::new(1, 10, true), &[
         (&[0.2], 0.5), (&[0.1], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer2::new(true), &[
+    mixer_is_symmetric(|| Mixer2::new(10, true), &[
         (&[0.2, 0.9], 0.5), (&[0.1, 0.99], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer3::new(true), &[
+    mixer_is_symmetric(|| Mixer3::new(10, true), &[
         (&[0.2, 0.9, 0.7], 0.5), (&[0.1, 0.99, 0.9], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer4::new(true), &[
+    mixer_is_symmetric(|| Mixer4::new(10, true), &[
         (&[0.2, 0.9, 0.7, 0.1], 0.5), (&[0.1, 0.99, 0.9, 0.01], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer5::new(true), &[
+    mixer_is_symmetric(|| Mixer5::new(10, true), &[
         (&[0.2, 0.9, 0.7, 0.1, 0.5], 0.5), (&[0.1, 0.99, 0.9, 0.01, 0.5], 0.01),
     ]);
 }
@@ -182,8 +183,10 @@ fn mixer_is_symmetric<Mxr: Mixer>(
             }
             let a_input_bit: Bit = (prng.next_real2() >= real_freq).into();
             let b_input_bit: Bit = !a_input_bit;
-            mixer_a.update_and_reset(a_input_bit, result_sq_a, &estimator_lut);
-            mixer_b.update_and_reset(b_input_bit, result_sq_b, &estimator_lut);
+            mixer_a.update_and_reset(
+                a_input_bit, result_sq_a, 1000, &estimator_lut);
+            mixer_b.update_and_reset(
+                b_input_bit, result_sq_b, 1000, &estimator_lut);
         }
     }
 }
