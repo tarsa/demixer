@@ -190,3 +190,20 @@ fn mixer_is_symmetric<Mxr: Mixer>(
         }
     }
 }
+
+#[test]
+fn mixer_clamps_result_between_bounds() {
+    let stretch_lut = StretchLut::new(false);
+    let squash_lut = SquashLut::new(&stretch_lut, false);
+    let d_estimator_lut = DeceleratingEstimatorLut::make_default();
+    let mut mixer = MixerN::new(1, 0, true);
+    let input_sq = FractOnlyU32::from_f64(0.99);
+    let input_st = stretch_lut.stretch(input_sq);
+    let fixed_mix_result = FractOnlyU32::from_f64(0.6);
+    for _ in 0..10_000 {
+        mixer.set_input(0, input_sq, input_st);
+        mixer.mix_all(&squash_lut);
+        mixer.update_and_reset(Bit::Zero, fixed_mix_result, 10,
+                               &d_estimator_lut);
+    }
+}

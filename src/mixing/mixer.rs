@@ -74,11 +74,10 @@ pub trait Mixer where Self: MixerData {
             ));
         }
         result = result.div(self.size() as i64);
-        let result_st: StretchedProbD = result.to_fix_i32();
+        let result_st: StretchedProbD = result.clamped().to_fix_i32();
         let result_sq = squash_lut.squash(result_st);
         (result_sq, result_st)
     }
-
 
     fn update_and_reset(&mut self, input_bit: Bit, mix_result_sq: FractOnlyU32,
                         max_update_factor_index: u16,
@@ -117,7 +116,7 @@ pub trait Mixer where Self: MixerData {
         assert!(update_factor_index(self) <= max_update_factor_index);
         assert!(max_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
         self.common_mut().update_factor_index =
-            UPDATE_FACTOR_INDEX_LIMIT.min(update_factor_index(self) + 1);
+            max_update_factor_index.min(update_factor_index(self) + 1);
         self.common_mut().inputs_mask = 0;
     }
 }
@@ -197,6 +196,7 @@ impl MixerN {
     }
 
     pub fn new_neutral(size: usize, initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
         assert!(size <= 30);
         MixerN {
             inputs: MixerInput::new_array_neutral(size),
@@ -232,6 +232,7 @@ pub struct Mixer2 {
 impl FixedSizeMixer for Mixer2 {
     const SIZE: usize = 2;
     fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
         let n = || MixerInput::NEUTRAL;
         Mixer2 {
             inputs: [n(), n()],
@@ -256,6 +257,7 @@ pub struct Mixer3 {
 impl FixedSizeMixer for Mixer3 {
     const SIZE: usize = 3;
     fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
         let n = || MixerInput::NEUTRAL;
         Mixer3 {
             inputs: [n(), n(), n()],
@@ -280,6 +282,7 @@ pub struct Mixer4 {
 impl FixedSizeMixer for Mixer4 {
     const SIZE: usize = 4;
     fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
         let n = || MixerInput::NEUTRAL;
         Mixer4 {
             inputs: [n(), n(), n(), n()],
@@ -304,6 +307,7 @@ pub struct Mixer5 {
 impl FixedSizeMixer for Mixer5 {
     const SIZE: usize = 5;
     fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
         let n = || MixerInput::NEUTRAL;
         Mixer5 {
             inputs: [n(), n(), n(), n(), n()],
