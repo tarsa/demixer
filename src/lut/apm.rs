@@ -19,7 +19,6 @@ use PRINT_DEBUG;
 use fixed_point::{FixedPoint, FixU32, fix_u32};
 use fixed_point::types::{FractOnlyU32, StretchedProbD};
 use lut::squash::SquashLut;
-use mixing::apm::AdaptiveProbabilityMap;
 
 pub struct ApmWeightingLut {
     squashed_interval_stops: Vec<FractOnlyU32>,
@@ -34,7 +33,7 @@ impl ApmWeightingLut {
             println!("apm weighting lut, fract bits: {}",
                      stretched_fract_index_bits);
         }
-        let interval_stops_count = AdaptiveProbabilityMap::interval_stops_count(
+        let interval_stops_count = StretchedProbD::interval_stops_count(
             stretched_fract_index_bits) as usize;
         let mut squashed_stops = Vec::with_capacity(interval_stops_count);
         let mut shifts_by_interval = Vec::with_capacity(interval_stops_count);

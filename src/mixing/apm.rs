@@ -37,7 +37,7 @@ impl AdaptiveProbabilityMap {
     pub fn new(contexts_number: usize, stretched_fract_index_bits: u8,
                squash_lut: &SquashLut) -> Self {
         let single_mapping_size =
-            Self::interval_stops_count(stretched_fract_index_bits);
+            StretchedProbD::interval_stops_count(stretched_fract_index_bits);
         let offset = single_mapping_size / 2;
         let mappings_size = contexts_number * single_mapping_size as usize;
         let mut mappings = Vec::with_capacity(mappings_size);
@@ -68,14 +68,6 @@ impl AdaptiveProbabilityMap {
         }
     }
 
-    pub fn intervals_count(stretched_fract_index_bits: u8) -> i32 {
-        2 * StretchedProbD::ABSOLUTE_LIMIT << stretched_fract_index_bits
-    }
-
-    pub fn interval_stops_count(stretched_fract_index_bits: u8) -> i32 {
-        1 + Self::intervals_count(stretched_fract_index_bits)
-    }
-
     pub fn refine(&mut self, context: usize,
                   input_sq: FractOnlyU32, input_st: StretchedProbD,
                   apm_lut: &ApmWeightingLut) -> FractOnlyU32 {
@@ -83,7 +75,8 @@ impl AdaptiveProbabilityMap {
                    apm_lut.stretched_fract_index_bits());
         assert_eq!(self.saved_left_context_index, -1);
         let fract_index_bits = self.stretched_fract_index_bits;
-        let stops_count = Self::interval_stops_count(fract_index_bits);
+        let stops_count =
+            StretchedProbD::interval_stops_count(fract_index_bits);
         let last_interval_stop = stops_count - 1;
         let input_sq = input_sq
             .min(apm_lut.squashed_interval_stops()[last_interval_stop as usize])
@@ -137,7 +130,7 @@ impl AdaptiveProbabilityMap {
                               log_rate: u8, fixed_weight: bool) {
         assert!(self.saved_left_context_index >= 0);
         assert!(context < self.contexts_number);
-        let base_index = context * Self::interval_stops_count(
+        let base_index = context * StretchedProbD::interval_stops_count(
             self.stretched_fract_index_bits) as usize;
         let left_context_index = self.saved_left_context_index as usize;
         // TODO decide later if using weights or not

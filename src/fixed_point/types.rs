@@ -260,6 +260,19 @@ impl StretchedProbD {
         StretchedProbD(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS);
     pub const MIN: Self =
         StretchedProbD(-(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS));
+
+    pub fn intervals_count(stretched_fract_index_bits: u8) -> i32 {
+        2 * Self::ABSOLUTE_LIMIT << stretched_fract_index_bits
+    }
+
+    pub fn interval_stops_count(stretched_fract_index_bits: u8) -> i32 {
+        1 + Self::intervals_count(stretched_fract_index_bits)
+    }
+
+    pub fn to_interval_index(&self, fract_index_bits: u8) -> i32 {
+        let offset = Self::ABSOLUTE_LIMIT << fract_index_bits;
+        offset + (self.raw() >> Self::FRACTIONAL_BITS - fract_index_bits)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
