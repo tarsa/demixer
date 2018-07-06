@@ -15,21 +15,4 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-extern crate core;
-
-pub mod bit;
-pub mod coding;
-pub mod estimators;
-pub mod fixed_point;
-pub mod history;
-pub mod lut;
-pub mod mixing;
-pub mod random;
-pub mod util;
-
-pub const DO_CHECKS: bool = true;
-pub const NO_CHECKS: bool = !DO_CHECKS;
-
-pub const MAX_ORDER: usize = 63;
-
-pub const PRINT_DEBUG: bool = false;
+pub mod indexer;
