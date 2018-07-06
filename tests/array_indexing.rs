@@ -22,15 +22,29 @@ use demixer::util::indexer::{
 };
 
 #[test]
+fn indexer_can_be_reused() {
+    let mut indexer = Indexer2::new(vec![3, 5]);
+    assert_ne!(
+        indexer.with_sub_index(2).with_sub_index(3).get_array_index_and_reset(),
+        indexer.with_sub_index(1).with_sub_index(1).get_array_index_and_reset(),
+    )
+}
+
+#[test]
 fn last_sub_index_has_least_impact_on_final_index() {
-    let make_unfinished = ||
-        Indexer5::new(vec![5, 8, 9, 1, 3])
+    let make_unfinished = || {
+        let mut indexer = Indexer5::new(vec![5, 8, 9, 1, 3]);
+        indexer
             .with_sub_index(2)
             .with_sub_index(3)
             .with_sub_index(4)
             .with_sub_index(0);
-    assert_eq!(make_unfinished().with_sub_index(1).into_array_index() + 1,
-               make_unfinished().with_sub_index(2).into_array_index());
+        indexer
+    };
+    assert_eq!(
+        make_unfinished().with_sub_index(1).get_array_index_and_reset() + 1,
+        make_unfinished().with_sub_index(2).get_array_index_and_reset()
+    );
 }
 
 #[test]
@@ -39,8 +53,8 @@ fn maximum_sub_indices_lead_to_maximum_final_index() {
     assert_eq!(make2()
                    .with_sub_index(4)
                    .with_sub_index(7)
-                   .into_array_index() + 1,
-               make2().into_array_size());
+                   .get_array_index_and_reset() + 1,
+               make2().get_array_size());
     let make5 = || Indexer5::new(vec![6, 2, 3, 1, 6]);
     assert_eq!(make5()
                    .with_sub_index(5)
@@ -48,38 +62,38 @@ fn maximum_sub_indices_lead_to_maximum_final_index() {
                    .with_sub_index(2)
                    .with_sub_index(0)
                    .with_sub_index(5)
-                   .into_array_index() + 1,
-               make5().into_array_size());
+                   .get_array_index_and_reset() + 1,
+               make5().get_array_size());
 }
 
 #[test]
 fn indexer_computes_correct_array_size() {
-    assert_eq!(Indexer1::new(vec![5]).into_array_size(), 5);
-    assert_eq!(Indexer2::new(vec![4, 5]).into_array_size(), 20);
-    assert_eq!(Indexer3::new(vec![2, 6, 3]).into_array_size(), 36);
-    assert_eq!(Indexer4::new(vec![2, 4, 6, 3]).into_array_size(), 144);
-    assert_eq!(Indexer5::new(vec![5, 8, 9, 1, 3]).into_array_size(), 1080);
-    assert_eq!(Indexer6::new(vec![5, 3, 8, 1, 3, 9]).into_array_size(), 3240);
+    assert_eq!(Indexer1::new(vec![5]).get_array_size(), 5);
+    assert_eq!(Indexer2::new(vec![4, 5]).get_array_size(), 20);
+    assert_eq!(Indexer3::new(vec![2, 6, 3]).get_array_size(), 36);
+    assert_eq!(Indexer4::new(vec![2, 4, 6, 3]).get_array_size(), 144);
+    assert_eq!(Indexer5::new(vec![5, 8, 9, 1, 3]).get_array_size(), 1080);
+    assert_eq!(Indexer6::new(vec![5, 3, 8, 1, 3, 9]).get_array_size(), 3240);
 }
 
 #[test]
 fn indexer_computes_correct_array_index() {
     let index = Indexer1::new(vec![5])
         .with_sub_index(3)
-        .into_array_index();
+        .get_array_index_and_reset();
     assert_eq!(index, 3);
 
     let index = Indexer2::new(vec![4, 5])
         .with_sub_index(2)
         .with_sub_index(3)
-        .into_array_index();
+        .get_array_index_and_reset();
     assert_eq!(index, 13);
 
     let index = Indexer3::new(vec![2, 6, 3])
         .with_sub_index(0)
         .with_sub_index(4)
         .with_sub_index(1)
-        .into_array_index();
+        .get_array_index_and_reset();
     assert_eq!(index, 13);
 
     let index = Indexer4::new(vec![2, 4, 6, 3])
@@ -87,7 +101,7 @@ fn indexer_computes_correct_array_index() {
         .with_sub_index(3)
         .with_sub_index(3)
         .with_sub_index(1)
-        .into_array_index();
+        .get_array_index_and_reset();
     assert_eq!(index, 136);
 
     let index = Indexer5::new(vec![5, 8, 9, 1, 3])
@@ -96,7 +110,7 @@ fn indexer_computes_correct_array_index() {
         .with_sub_index(4)
         .with_sub_index(0)
         .with_sub_index(2)
-        .into_array_index();
+        .get_array_index_and_reset();
     assert_eq!(index, 527);
 
     let index = Indexer6::new(vec![5, 3, 8, 1, 3, 9])
@@ -106,6 +120,6 @@ fn indexer_computes_correct_array_index() {
         .with_sub_index(0)
         .with_sub_index(1)
         .with_sub_index(8)
-        .into_array_index();
+        .get_array_index_and_reset();
     assert_eq!(index, 1178);
 }

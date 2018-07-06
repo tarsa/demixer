@@ -26,7 +26,7 @@ pub trait Indexer where Self: Sized {
     }
     fn new_uninitialized() -> Self;
 
-    fn into_array_size(mut self) -> usize {
+    fn get_array_size(&mut self) -> usize {
         assert_eq!(self.common_mut().current_input_index, 0);
         let mut result: usize = 1;
         for dimension in self.dimensions_mut().iter() {
@@ -35,22 +35,25 @@ pub trait Indexer where Self: Sized {
         result
     }
 
-    fn with_sub_index(mut self, value: usize) -> Self {
+    fn with_sub_index(&mut self, value: usize) -> &mut Self {
         let current_input_index = self.common_mut().current_input_index;
         assert!(current_input_index < self.inputs_num());
-        assert!(value < self.dimensions_mut()[current_input_index].limit);
+        assert!(value < self.dimensions_mut()[current_input_index].limit,
+                "value: {}, limit: {}",
+                value, self.dimensions_mut()[current_input_index].limit);
         self.dimensions_mut()[current_input_index].value = value;
         self.common_mut().current_input_index += 1;
         self
     }
-    fn into_array_index(mut self) -> usize {
+    fn get_array_index_and_reset(&mut self) -> usize {
         let current_input_index = self.common_mut().current_input_index;
         assert_eq!(current_input_index, self.inputs_num());
         let mut result: usize = 0;
         for dimension in self.dimensions_mut().iter() {
-            result = result.checked_mul(dimension.limit).unwrap();
-            result = result.checked_add(dimension.value).unwrap();
+            result *= dimension.limit;
+            result += dimension.value;
         }
+        self.common_mut().current_input_index = 0;
         result
     }
 
