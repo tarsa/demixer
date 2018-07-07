@@ -15,5 +15,15 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-pub mod indexer;
-pub mod quantizers;
+extern crate demixer;
+
+use demixer::util::quantizers::OccurrenceCountQuantizer;
+
+#[test]
+fn occurrence_count_quantizer_is_monotonic() {
+    for input in 0..<u16>::max_value() {
+        let current_output = OccurrenceCountQuantizer::quantize(input);
+        let next_output = OccurrenceCountQuantizer::quantize(input);
+        assert!(next_output - current_output <= 1, "input: {}", input);
+    }
+}

@@ -15,5 +15,24 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-pub mod indexer;
-pub mod quantizers;
+
+pub struct OccurrenceCountQuantizer;
+
+impl OccurrenceCountQuantizer {
+    const SIGNIFICAND_BITS: usize = 1;
+
+    pub fn max_output() -> usize {
+        Self::quantize(<u16>::max_value())
+    }
+
+    pub fn quantize(input: u16) -> usize {
+        if input < (1 << Self::SIGNIFICAND_BITS) {
+            input as usize
+        } else {
+            let bit_length = (16 - input.leading_zeros()) as usize;
+            let bits_cut = bit_length - Self::SIGNIFICAND_BITS - 1;
+            let input = input as usize >> bits_cut;
+            (bits_cut << Self::SIGNIFICAND_BITS) + input
+        }
+    }
+}
