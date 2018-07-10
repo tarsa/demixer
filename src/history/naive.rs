@@ -58,9 +58,10 @@ impl<'a> HistorySource<'a> for NaiveHistorySource<'a> {
                 self.input.index_subtract(self.input.cursor(), order).raw();
             for scanned_index in 0..stop_search_position {
                 let scanned_index = WindowIndex::new(scanned_index);
+                let current_occurrence_index =
+                    self.input.index_subtract(self.input.cursor(), order);
                 let prefix_equal = self.input.compare_for_equal_prefix(
-                    scanned_index,
-                    self.input.index_subtract(self.input.cursor(), order),
+                    scanned_index, current_occurrence_index,
                     self.bit_index as usize, order,
                 );
                 if prefix_equal {
@@ -68,12 +69,15 @@ impl<'a> HistorySource<'a> for NaiveHistorySource<'a> {
                         self.input.index_add(scanned_index, order),
                         self.bit_index as usize);
                     let new_context_state = {
+                        let current_occurrence_distance = self.input.index_diff(
+                            current_occurrence_index, scanned_index);
                         if let Some(context_state) = last_context_state_opt {
                             context_state.next_state(
-                                scanned_index, bit_in_context, self.luts)
+                                current_occurrence_distance, bit_in_context,
+                                self.luts)
                         } else {
                             ContextState::starting_state(
-                                scanned_index, bit_in_context)
+                                current_occurrence_distance, bit_in_context)
                         }
                     };
                     last_context_state_opt = Some(new_context_state);

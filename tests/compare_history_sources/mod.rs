@@ -22,7 +22,6 @@ use demixer::bit::Bit;
 use demixer::history::{
     HistorySource,
     CollectedContextStates,
-    ContextState,
 };
 use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
@@ -78,28 +77,7 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool,
                          index, bit_index, input);
             }
             assert_eq!(fat_map_source_results.items(),
-                       &tree_source_results.items().iter().map(|ctx_state| {
-                           let last_occurrence_index = tree_source.tree.window
-                               .index_subtract(
-                                   ctx_state.last_occurrence_index(),
-                                   tree_source.tree.window.start().raw());
-                           match ctx_state {
-                               &ContextState::ForEdge {
-                                   occurrence_count, repeated_bit, ..
-                               } => ContextState::ForEdge {
-                                   last_occurrence_index,
-                                   occurrence_count,
-                                   repeated_bit,
-                               },
-                               &ContextState::ForNode {
-                                   probability_estimator, bit_history, ..
-                               } => ContextState::ForNode {
-                                   last_occurrence_index,
-                                   probability_estimator,
-                                   bit_history,
-                               },
-                           }
-                       }).collect::<Vec<_>>()[..],
+                       tree_source_results.items(),
                        "index = {}, bit index = {}, input = {:?}",
                        index, bit_index, input);
 

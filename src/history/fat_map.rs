@@ -27,8 +27,9 @@ use super::{
     ContextState,
     CollectedContextStates,
 };
-use super::window::InputWindow;
+use super::window::{WindowIndex, InputWindow};
 
+/// NOTE: last_occurrence_distance in fact holds last occurrence index
 pub struct FatMapHistorySource<'a> {
     luts: &'a LookUpTables,
     input: InputWindow,
@@ -81,9 +82,23 @@ impl<'a> HistorySource<'a> for FatMapHistorySource<'a> {
                 flat_map(|vec| vec.into_iter().find(|item| {
                     self.input.compare_for_equal_prefix(
                         self.input.index_subtract(self.input.cursor(), order),
-                        item.last_occurrence_index(), self.bit_index, order)
+                        WindowIndex::new(item.last_occurrence_distance()),
+                        self.bit_index, order)
                 })).last() {
-                Some(ctx) => bit_histories.items.push(ctx.clone()),
+                Some(ctx) => {
+                    let mut ctx = ctx.clone();
+                    let actual_distance = self.input.cursor().raw() - order
+                        - ctx.last_occurrence_distance();
+                    match &mut ctx {
+                        &mut ContextState::ForEdge {
+                            ref mut last_occurrence_distance, ..
+                        } => *last_occurrence_distance = actual_distance,
+                        &mut ContextState::ForNode {
+                            ref mut last_occurrence_distance, ..
+                        } => *last_occurrence_distance = actual_distance,
+                    };
+                    bit_histories.items.push(ctx)
+                }
                 None => { break; }
             }
         }
@@ -99,12 +114,18 @@ impl<'a> HistorySource<'a> for FatMapHistorySource<'a> {
             let bit_index = self.bit_index;
             let luts = self.luts;
             let found = vec.iter_mut()
-                .find(|item| input.compare_for_equal_prefix(
-                    byte_index, item.last_occurrence_index(), bit_index, order))
-                .map(|ctx| *ctx = ctx.next_state(byte_index, input_bit, luts))
+                .find(|item| {
+                    let last_occurrence_index =
+                        WindowIndex::new(item.last_occurrence_distance());
+                    input.compare_for_equal_prefix(
+                        byte_index, last_occurrence_index, bit_index, order)
+                })
+                .map(|ctx| *ctx =
+                    ctx.next_state(byte_index.raw(), input_bit, luts))
                 .is_some();
             if !found {
-                vec.push(ContextState::starting_state(byte_index, input_bit));
+                vec.push(ContextState::starting_state(byte_index.raw(),
+                                                      input_bit));
             }
         }
         self.input.set_bit_at_cursor(input_bit, self.bit_index);

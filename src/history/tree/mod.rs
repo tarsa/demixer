@@ -419,12 +419,15 @@ impl<'a> Tree<'a> {
                     active_contexts.items.iter().enumerate() {
                     let node = &self.nodes[context.node_index];
                     let last_occurrence_index = context.suffix_index;
+                    let current_occurrence_index = self.window.index_subtract(
+                        self.window.cursor(), order);
                     assert!(self.window.index_is_smaller(
-                        last_occurrence_index, self.window.index_subtract(
-                            self.window.cursor(), order)));
+                        last_occurrence_index, current_occurrence_index));
+                    let last_occurrence_distance = self.window.index_diff(
+                        current_occurrence_index, last_occurrence_index);
                     if node.depth() == order * 8 + 7 - bit_index {
                         collected_states.items.push(ContextState::ForNode {
-                            last_occurrence_index,
+                            last_occurrence_distance,
                             probability_estimator: node.probability_estimator(),
                             bit_history: node.history_state(),
                         });
@@ -435,7 +438,7 @@ impl<'a> Tree<'a> {
                                 self.window.index_add(
                                     last_occurrence_index, order), bit_index);
                             collected_states.items.push(ContextState::ForEdge {
-                                last_occurrence_index,
+                                last_occurrence_distance,
                                 repeated_bit,
                                 occurrence_count:
                                 context.incoming_edge_visits_count as u16,
@@ -450,8 +453,7 @@ impl<'a> Tree<'a> {
                     .min(self.window.size() - 1);
                 for order in 0..count {
                     collected_states.items.push(ContextState::ForEdge {
-                        last_occurrence_index: self.window.index_subtract(
-                            self.window.cursor(), order + 1),
+                        last_occurrence_distance: 1,
                         occurrence_count:
                         (ContextState::MAX_OCCURRENCE_COUNT as usize)
                             .min(self.window.size() - order - 1) as u16,

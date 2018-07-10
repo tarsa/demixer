@@ -435,13 +435,11 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
 
             assert_eq!(
                 source_1_results.items().iter().map(
-                    |ctx_state| source_1.tree.window.index_subtract(
-                        ctx_state.last_occurrence_index(), offset_1)
+                    |ctx_state| ctx_state.last_occurrence_distance()
                 ).collect::<Vec<_>>(),
                 source_2_results.items().iter().map(
-                    |ctx_state| source_2.tree.window.index_subtract(
-                        ctx_state.last_occurrence_index(), offset_2))
-                    .collect::<Vec<_>>(),
+                    |ctx_state| ctx_state.last_occurrence_distance()
+                ).collect::<Vec<_>>(),
                 "index = {}, bit index = {}, input = {:?}",
                 index, bit_index, &common[..index + 1]);
 

@@ -25,17 +25,16 @@ use bit::Bit;
 use estimators::decelerating::DeceleratingEstimator;
 use lut::LookUpTables;
 use self::state::{TheHistoryState, HistoryState, HistoryStateFactory};
-use self::window::WindowIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContextState {
     ForEdge {
-        last_occurrence_index: WindowIndex,
+        last_occurrence_distance: usize,
         occurrence_count: u16,
         repeated_bit: Bit,
     },
     ForNode {
-        last_occurrence_index: WindowIndex,
+        last_occurrence_distance: usize,
         probability_estimator: DeceleratingEstimator,
         bit_history: TheHistoryState,
     },
@@ -45,12 +44,21 @@ impl ContextState {
     pub const MAX_OCCURRENCE_COUNT: u16 =
         DeceleratingEstimator::MAX_COUNT;
 
-    pub fn last_occurrence_index(&self) -> WindowIndex {
+    pub fn last_occurrence_distance(&self) -> usize {
         match self {
-            &ContextState::ForEdge { last_occurrence_index, .. } =>
-                last_occurrence_index,
-            &ContextState::ForNode { last_occurrence_index, .. } =>
-                last_occurrence_index,
+            &ContextState::ForEdge { last_occurrence_distance, .. } =>
+                last_occurrence_distance,
+            &ContextState::ForNode { last_occurrence_distance, .. } =>
+                last_occurrence_distance,
+        }
+    }
+
+    pub fn occurrence_count(&self) -> u16 {
+        match self {
+            &ContextState::ForEdge { occurrence_count, .. } =>
+                occurrence_count,
+            &ContextState::ForNode { probability_estimator, .. } =>
+                probability_estimator.usage_count(),
         }
     }
 
@@ -64,17 +72,17 @@ impl ContextState {
         }
     }
 
-    fn starting_state(first_occurrence_index: WindowIndex, bit_in_context: Bit)
+    fn starting_state(first_occurrence_distance: usize, bit_in_context: Bit)
                       -> ContextState {
         ContextState::ForEdge {
-            last_occurrence_index: first_occurrence_index,
+            last_occurrence_distance: first_occurrence_distance,
             occurrence_count: 1,
             repeated_bit: bit_in_context,
         }
     }
 
-    fn next_state(&self, new_occurrence_index: WindowIndex, bit_in_context: Bit,
-                  luts: &LookUpTables) -> ContextState {
+    fn next_state(&self, new_occurrence_distance: usize,
+                  bit_in_context: Bit, luts: &LookUpTables) -> ContextState {
         match self {
             &ContextState::ForNode {
                 probability_estimator, bit_history, ..
@@ -84,7 +92,7 @@ impl ContextState {
                 probability_estimator.update(
                     bit_in_context, luts.d_estimator_lut());
                 ContextState::ForNode {
-                    last_occurrence_index: new_occurrence_index,
+                    last_occurrence_distance: new_occurrence_distance,
                     probability_estimator,
                     bit_history: bit_history.updated(bit_in_context),
                 }
@@ -94,7 +102,7 @@ impl ContextState {
             } => {
                 if repeated_bit == bit_in_context {
                     ContextState::ForEdge {
-                        last_occurrence_index: new_occurrence_index,
+                        last_occurrence_distance: new_occurrence_distance,
                         occurrence_count:
                         ContextState::MAX_OCCURRENCE_COUNT
                             .min(occurrence_count + 1),
@@ -109,7 +117,7 @@ impl ContextState {
                     let bit_history = luts.history_state_factory().for_new_node(
                         bit_in_context, occurrence_count);
                     ContextState::ForNode {
-                        last_occurrence_index: new_occurrence_index,
+                        last_occurrence_distance: new_occurrence_distance,
                         probability_estimator: d_estimator,
                         bit_history,
                     }
