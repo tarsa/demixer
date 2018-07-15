@@ -18,11 +18,10 @@
 use bit::Bit;
 use lut::LookUpTables;
 use super::{
-    HistorySource,
-    ContextState,
-    CollectedContextStates,
+    ContextState, CollectedContextStates, HistorySource,
 };
 use super::window::{InputWindow, WindowIndex};
+use super::tree::node::CostTrackers;
 
 pub struct NaiveHistorySource<'a> {
     luts: &'a LookUpTables,
@@ -72,9 +71,11 @@ impl<'a> HistorySource<'a> for NaiveHistorySource<'a> {
                         let current_occurrence_distance = self.input.index_diff(
                             current_occurrence_index, scanned_index);
                         if let Some(context_state) = last_context_state_opt {
+                            let cost_trackers_opt = Some(CostTrackers::DEFAULT)
+                                .filter(|_| context_state.is_for_node());
                             context_state.next_state(
                                 current_occurrence_distance, bit_in_context,
-                                self.luts)
+                                cost_trackers_opt, self.luts)
                         } else {
                             ContextState::starting_state(
                                 current_occurrence_distance, bit_in_context)
@@ -91,7 +92,10 @@ impl<'a> HistorySource<'a> for NaiveHistorySource<'a> {
         }
     }
 
-    fn process_input_bit(&mut self, input_bit: Bit) {
+    fn process_input_bit(&mut self, input_bit: Bit,
+                         new_cost_trackers: &[CostTrackers]) {
+        assert!(new_cost_trackers.iter().all(|c| *c == CostTrackers::DEFAULT),
+                "cost tracking is unsupported in this history source");
         self.input.set_bit_at_cursor(input_bit, self.bit_index as usize);
         self.bit_index -= 1;
     }

@@ -30,7 +30,7 @@ use super::state::HistoryStateFactory;
 use super::window::{InputWindow, WindowIndex};
 use self::context::{ActiveContexts, Context};
 use self::direction::Direction;
-use self::node::Node;
+use self::node::{CostTrackers, Node};
 use self::node_child::{NodeChild, NodeChildren};
 use self::nodes::{NodeIndex, Nodes};
 
@@ -76,17 +76,18 @@ impl<'a> HistorySource<'a> for TreeHistorySource<'a> {
     }
 
     fn gather_history_states(&self,
-                             bit_histories: &mut CollectedContextStates) {
+                             collected_states: &mut CollectedContextStates) {
         assert!(self.bit_index >= 0);
-        self.tree.gather_states(&self.active_contexts, bit_histories,
+        self.tree.gather_states(&self.active_contexts, collected_states,
                                 self.bit_index as usize);
     }
 
-    fn process_input_bit(&mut self, input_bit: Bit) {
+    fn process_input_bit(&mut self, input_bit: Bit,
+                         new_cost_trackers: &[CostTrackers]) {
         assert!(self.bit_index >= 0);
         let max_order = self.active_contexts.max_order();
-        self.tree.extend(&mut self.active_contexts, input_bit,
-                         self.bit_index as usize, max_order);
+        self.tree.extend(&mut self.active_contexts, new_cost_trackers,
+                         input_bit, self.bit_index as usize, max_order);
         self.bit_index -= 1;
     }
 }
@@ -411,7 +412,7 @@ impl<'a> Tree<'a> {
     pub fn gather_states(&self, active_contexts: &ActiveContexts,
                          collected_states: &mut CollectedContextStates,
                          bit_index: usize) {
-        collected_states.reset();
+        assert_eq!(collected_states.items().len(), 0);
         match self.tree_state {
             TreeState::Proper => {
                 assert_ne!(self.window.cursor(), self.window.start());
@@ -430,6 +431,7 @@ impl<'a> Tree<'a> {
                             last_occurrence_distance,
                             probability_estimator: node.probability_estimator(),
                             bit_history: node.history_state(),
+                            cost_trackers: node.cost_trackers(),
                         });
                     } else {
                         assert_ne!(context.incoming_edge_visits_count, -1);
@@ -466,6 +468,7 @@ impl<'a> Tree<'a> {
     }
 
     pub fn extend(&mut self, active_contexts: &mut ActiveContexts,
+                  new_cost_trackers: &[CostTrackers],
                   incoming_bit: Bit, bit_index: usize, max_order: usize) {
         self.window.set_bit_at_cursor(incoming_bit, bit_index);
         match self.tree_state {
@@ -489,21 +492,26 @@ impl<'a> Tree<'a> {
                     if self.nodes()[node_index].depth()
                         == order * 8 + 7 - bit_index {
                         assert!(!context.in_leaf);
+                        assert!(order < new_cost_trackers.len());
                         context.descend(self, order, bit_index,
-                                        self.luts.d_estimator_lut());
+                                        new_cost_trackers[order].clone(),
+                                        self.luts.d_estimator_rates());
                         if PRINT_DEBUG { self.print(); }
-                    } else if self.window.bytes_differ_on(
-                        self.window.index_add(context.suffix_index, order),
-                        self.window.cursor(), bit_index,
-                    ) {
-                        assert!(
-                            context.in_leaf || self.nodes()[node_index].depth()
-                                >= order * 8,
-                            "order = {}, context = {}", order, context);
-                        self.split_edge(&context, order, bit_index, self.luts);
-                        if PRINT_DEBUG { self.print(); }
-                        assert_eq!(count - 1, order);
-                        count = order;
+                    } else {
+                        assert!(order >= new_cost_trackers.len());
+                        if self.window.bytes_differ_on(
+                            self.window.index_add(context.suffix_index, order),
+                            self.window.cursor(), bit_index,
+                        ) {
+                            let node_depth = self.nodes()[node_index].depth();
+                            assert!(context.in_leaf || node_depth >= order * 8,
+                                    "order = {}, context = {}", order, context);
+                            self.split_edge(&context, order, bit_index,
+                                            self.luts);
+                            if PRINT_DEBUG { self.print(); }
+                            assert_eq!(count - 1, order);
+                            count = order;
+                        }
                     }
                 }
                 active_contexts.keep_only(count);
@@ -578,15 +586,18 @@ impl<'a> Tree<'a> {
             context.incoming_edge_visits_count as u16;
         let bit = self.window.get_bit(self.window.cursor(), bit_index);
         let direction: Direction = bit.into();
-        let mut probability_estimator = luts.d_estimator_cache().for_bit_run(
-            !bit,
+        let probability_estimator = luts.d_estimator_cache().for_new_node(
+            bit,
             DeceleratingEstimator::MAX_COUNT.min(incoming_edge_visits_count));
-        probability_estimator.update(bit, luts.d_estimator_lut());
+        let cost_tracker = luts.cost_trackers_lut()
+            .for_new_node(incoming_edge_visits_count);
+        let cost_trackers = CostTrackers::new(cost_tracker, cost_tracker);
         let bit_history = luts.history_state_factory()
             .for_new_node(bit, incoming_edge_visits_count);
         Node::new(text_start,
                   probability_estimator,
                   context_order * 8 + 7 - bit_index,
+                  cost_trackers,
                   direction.fold(|| 1, || incoming_edge_visits_count),
                   direction.fold(|| incoming_edge_visits_count, || 1),
                   bit_history,
@@ -612,20 +623,22 @@ impl<'a> Tree<'a> {
                 direction.fold(|| branching_child, || chained_child),
                 direction.fold(|| chained_child, || branching_child),
             ]);
-            let mut probability_estimator = luts.d_estimator_cache()
-                .for_bit_run(!bit, (DeceleratingEstimator::MAX_COUNT as usize)
-                    .min(self.window.size() - current_context_order - 1)
-                    as u16);
-            probability_estimator.update(bit, luts.d_estimator_lut());
-            let bit_history = luts.history_state_factory().for_new_node(
-                bit, (self.window.size() - current_context_order - 1) as u16);
             let repeated_edge_count =
-                self.window.index_diff(suffix_start, self.window.start()).min(
-                    ContextState::MAX_OCCURRENCE_COUNT as usize) as u16;
+                (ContextState::MAX_OCCURRENCE_COUNT as usize).min(
+                    self.window.index_diff(suffix_start, self.window.start())
+                ) as u16;
+            let probability_estimator = luts.d_estimator_cache()
+                .for_new_node(bit, repeated_edge_count);
+            let bit_history = luts.history_state_factory()
+                .for_new_node(bit, repeated_edge_count);
+            let cost_tracker = luts.cost_trackers_lut()
+                .for_new_node(repeated_edge_count);
+            let cost_trackers = CostTrackers::new(cost_tracker, cost_tracker);
             let node = Node::new(
                 suffix_start,
                 probability_estimator,
                 current_context_order * 8 + 7 - bit_index,
+                cost_trackers,
                 direction.fold(|| 1, || repeated_edge_count),
                 direction.fold(|| repeated_edge_count, || 1),
                 bit_history,

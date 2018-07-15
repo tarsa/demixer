@@ -22,13 +22,14 @@ use fixed_point::{FixedPoint, FixI32, fix_i32, FixU32, FixI64};
 use fixed_point::types::{
     FractOnlyI32, FractOnlyU32, StretchedProbD, StretchedProbQ, MixerWeight,
 };
-use lut::estimator::DeceleratingEstimatorLut;
+use lut::estimator::DeceleratingEstimatorRates;
 use lut::squash::SquashLut;
 
 const UPDATE_FACTOR_INDEX_LIMIT: u16 = DeceleratingEstimator::MAX_COUNT;
 
 fn fixed_update_factor() -> FractOnlyI32 {
-    FractOnlyI32::new(1_000_000_000, 31)
+//    FractOnlyI32::new(500_000_000, 31)
+    FractOnlyI32::HALF
 }
 
 pub trait Mixer where Self: MixerData {
@@ -73,7 +74,6 @@ pub trait Mixer where Self: MixerData {
                 &self.prediction_st(index),
             ));
         }
-        result = result.div(self.size() as i64);
         let result_st: StretchedProbD = result.clamped().to_fix_i32();
         let result_sq = squash_lut.squash(result_st);
         (result_sq, result_st)
@@ -81,10 +81,10 @@ pub trait Mixer where Self: MixerData {
 
     fn update_and_reset(&mut self, input_bit: Bit, mix_result_sq: FractOnlyU32,
                         max_update_factor_index: u16,
-                        d_estimator_lut: &DeceleratingEstimatorLut) {
+                        d_estimator_rates_lut: &DeceleratingEstimatorRates) {
         assert_eq!(self.common().inputs_mask, (1u32 << self.size()) - 1);
         let dynamic_update_factor = FractOnlyI32::new(
-            d_estimator_lut[update_factor_index(self)].raw() as i32, 31);
+            d_estimator_rates_lut[update_factor_index(self)].raw() as i32, 31);
         let update_factor: FractOnlyI32 = fix_i32::mul(
             &fixed_update_factor(), &dynamic_update_factor);
         match input_bit {

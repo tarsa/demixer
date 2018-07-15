@@ -21,7 +21,7 @@ use demixer::PRINT_DEBUG;
 use demixer::bit::Bit;
 use demixer::fixed_point::{FixedPoint, FixI32};
 use demixer::fixed_point::types::FractOnlyU32;
-use demixer::lut::estimator::DeceleratingEstimatorLut;
+use demixer::lut::estimator::DeceleratingEstimatorRates;
 use demixer::lut::squash::SquashLut;
 use demixer::lut::stretch::StretchLut;
 use demixer::mixing::mixer::{
@@ -67,7 +67,7 @@ fn mixer_converges_to_real_probability<Mxr: Mixer>(
     input_freqs_with_real_freqs: &[(&[f64], f64)],
     max_overhead: f64,
 ) {
-    let estimator_lut = DeceleratingEstimatorLut::make_default();
+    let estimator_rates_lut = DeceleratingEstimatorRates::make_default();
     let stretch_lut = StretchLut::new(false);
     let squash_lut = SquashLut::new(&stretch_lut, false);
     let warmup_iterations = 100_000;
@@ -99,7 +99,7 @@ fn mixer_converges_to_real_probability<Mxr: Mixer>(
                 let input_bit: Bit =
                     (flipped ^ (prng.next_real2() >= real_freq)).into();
                 mixer.update_and_reset(
-                    input_bit, result_sq, 1000, &estimator_lut);
+                    input_bit, result_sq, 1000, &estimator_rates_lut);
                 if i >= warmup_iterations {
                     match input_bit {
                         Bit::Zero =>
@@ -156,7 +156,7 @@ fn mixer_is_symmetric<Mxr: Mixer>(
     make_mixer: fn() -> Mxr,
     input_freqs_with_real_freqs: &[(&[f64], f64)],
 ) {
-    let estimator_lut = DeceleratingEstimatorLut::make_default();
+    let estimator_rates_lut = DeceleratingEstimatorRates::make_default();
     let stretch_lut = StretchLut::new(false);
     let squash_lut = SquashLut::new(&stretch_lut, false);
     for &(input_freqs, real_freq) in input_freqs_with_real_freqs.iter() {
@@ -184,9 +184,9 @@ fn mixer_is_symmetric<Mxr: Mixer>(
             let a_input_bit: Bit = (prng.next_real2() >= real_freq).into();
             let b_input_bit: Bit = !a_input_bit;
             mixer_a.update_and_reset(
-                a_input_bit, result_sq_a, 1000, &estimator_lut);
+                a_input_bit, result_sq_a, 1000, &estimator_rates_lut);
             mixer_b.update_and_reset(
-                b_input_bit, result_sq_b, 1000, &estimator_lut);
+                b_input_bit, result_sq_b, 1000, &estimator_rates_lut);
         }
     }
 }
@@ -195,7 +195,7 @@ fn mixer_is_symmetric<Mxr: Mixer>(
 fn mixer_clamps_result_between_bounds() {
     let stretch_lut = StretchLut::new(false);
     let squash_lut = SquashLut::new(&stretch_lut, false);
-    let d_estimator_lut = DeceleratingEstimatorLut::make_default();
+    let d_estimator_rates_lut = DeceleratingEstimatorRates::make_default();
     let mut mixer = MixerN::new(1, 0, true);
     let input_sq = FractOnlyU32::from_f64(0.99);
     let input_st = stretch_lut.stretch(input_sq);
@@ -204,6 +204,6 @@ fn mixer_clamps_result_between_bounds() {
         mixer.set_input(0, input_sq, input_st);
         mixer.mix_all(&squash_lut);
         mixer.update_and_reset(Bit::Zero, fixed_mix_result, 10,
-                               &d_estimator_lut);
+                               &d_estimator_rates_lut);
     }
 }

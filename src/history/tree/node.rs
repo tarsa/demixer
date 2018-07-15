@@ -18,19 +18,39 @@
 use core::fmt;
 
 use bit::Bit;
+use estimators::cost::CostTracker;
 use estimators::decelerating::DeceleratingEstimator;
 use history::ContextState;
 use history::state::{TheHistoryState, HistoryState};
 use history::window::WindowIndex;
-use lut::estimator::DeceleratingEstimatorLut;
+use lut::estimator::DeceleratingEstimatorRates;
 use super::direction::Direction;
 use super::node_child::{NodeChild, NodeChildren};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CostTrackers {
+    stationary: CostTracker,
+    non_stationary: CostTracker,
+}
+
+impl CostTrackers {
+    pub const DEFAULT: Self =
+        CostTrackers {
+            stationary: CostTracker::INITIAL,
+            non_stationary: CostTracker::INITIAL,
+        };
+
+    pub fn new(stationary: CostTracker, non_stationary: CostTracker) -> Self {
+        CostTrackers { stationary, non_stationary }
+    }
+}
 
 #[derive(Clone)]
 pub struct Node {
     pub children: NodeChildren,
     pub text_start: u32,
     probability_estimator: DeceleratingEstimator,
+    cost_trackers: CostTrackers,
     history_state: TheHistoryState,
     depth: u16,
     left_count: u16,
@@ -42,6 +62,7 @@ impl Node {
         children: NodeChildren::INVALID,
         text_start: 0,
         probability_estimator: DeceleratingEstimator::INVALID,
+        cost_trackers: CostTrackers::DEFAULT,
         history_state: TheHistoryState::INVALID,
         depth: 0,
         left_count: 0,
@@ -50,7 +71,7 @@ impl Node {
 
     pub fn new(text_start: WindowIndex,
                probability_estimator: DeceleratingEstimator, depth: usize,
-               left_count: u16, right_count: u16,
+               cost_trackers: CostTrackers, left_count: u16, right_count: u16,
                history_state: TheHistoryState, children: NodeChildren) -> Node {
         assert!((text_start.raw() as u64) < 1u64 << 31);
         assert!((depth as u64) < 1u64 << 16);
@@ -61,6 +82,7 @@ impl Node {
             children,
             text_start: text_start.raw() as u32,
             probability_estimator,
+            cost_trackers,
             history_state,
             depth: depth as u16,
             left_count,
@@ -79,6 +101,10 @@ impl Node {
 
     pub fn probability_estimator(&self) -> DeceleratingEstimator {
         self.probability_estimator
+    }
+
+    pub fn cost_trackers(&self) -> CostTrackers {
+        self.cost_trackers.clone()
     }
 
     pub fn depth(&self) -> usize {
@@ -102,7 +128,8 @@ impl Node {
     }
 
     pub fn increment_edge_counters(&mut self, direction: Direction,
-                                   lut: &DeceleratingEstimatorLut) {
+                                   new_cost_trackers: CostTrackers,
+                                   lut: &DeceleratingEstimatorRates) {
         match direction {
             Direction::Left => self.left_count =
                 ContextState::MAX_OCCURRENCE_COUNT.min(self.left_count + 1),
@@ -112,6 +139,7 @@ impl Node {
         let bit: Bit = direction.into();
         self.history_state = self.history_state.updated(bit);
         self.probability_estimator.update(bit, &lut);
+        self.cost_trackers = new_cost_trackers;
     }
 }
 

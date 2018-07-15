@@ -25,8 +25,9 @@ use bit::Bit;
 use estimators::decelerating::DeceleratingEstimator;
 use lut::LookUpTables;
 use self::state::{TheHistoryState, HistoryState, HistoryStateFactory};
+use self::tree::node::CostTrackers;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContextState {
     ForEdge {
         last_occurrence_distance: usize,
@@ -37,12 +38,20 @@ pub enum ContextState {
         last_occurrence_distance: usize,
         probability_estimator: DeceleratingEstimator,
         bit_history: TheHistoryState,
+        cost_trackers: CostTrackers,
     },
 }
 
 impl ContextState {
     pub const MAX_OCCURRENCE_COUNT: u16 =
         DeceleratingEstimator::MAX_COUNT;
+
+    pub fn is_for_node(&self) -> bool {
+        match self {
+            &ContextState::ForEdge { .. } => false,
+            &ContextState::ForNode { .. } => true,
+        }
+    }
 
     pub fn last_occurrence_distance(&self) -> usize {
         match self {
@@ -81,25 +90,37 @@ impl ContextState {
         }
     }
 
+    pub fn neutralize_cost_trackers(&mut self) {
+        match self {
+            &mut ContextState::ForEdge { .. } => (),
+            &mut ContextState::ForNode { ref mut cost_trackers, .. } =>
+                *cost_trackers = CostTrackers::DEFAULT,
+        }
+    }
+
     fn next_state(&self, new_occurrence_distance: usize,
-                  bit_in_context: Bit, luts: &LookUpTables) -> ContextState {
+                  bit_in_context: Bit, cost_trackers_opt: Option<CostTrackers>,
+                  luts: &LookUpTables) -> ContextState {
         match self {
             &ContextState::ForNode {
                 probability_estimator, bit_history, ..
             } => {
+                assert!(cost_trackers_opt.is_some());
                 let mut probability_estimator =
                     probability_estimator.clone();
                 probability_estimator.update(
-                    bit_in_context, luts.d_estimator_lut());
+                    bit_in_context, luts.d_estimator_rates());
                 ContextState::ForNode {
                     last_occurrence_distance: new_occurrence_distance,
                     probability_estimator,
                     bit_history: bit_history.updated(bit_in_context),
+                    cost_trackers: cost_trackers_opt.unwrap(),
                 }
             }
             &ContextState::ForEdge {
                 occurrence_count, repeated_bit, ..
             } => {
+                assert!(cost_trackers_opt.is_none());
                 if repeated_bit == bit_in_context {
                     ContextState::ForEdge {
                         last_occurrence_distance: new_occurrence_distance,
@@ -109,17 +130,19 @@ impl ContextState {
                         repeated_bit,
                     }
                 } else {
-                    let mut d_estimator =
-                        luts.d_estimator_cache().for_bit_run(
-                            repeated_bit, occurrence_count);
-                    d_estimator.update(
-                        bit_in_context, luts.d_estimator_lut());
+                    let d_estimator = luts.d_estimator_cache().for_new_node(
+                        bit_in_context, occurrence_count);
                     let bit_history = luts.history_state_factory().for_new_node(
                         bit_in_context, occurrence_count);
+                    let cost_tracker =
+                        luts.cost_trackers_lut().for_new_node(occurrence_count);
+                    let cost_trackers =
+                        CostTrackers::new(cost_tracker, cost_tracker);
                     ContextState::ForNode {
                         last_occurrence_distance: new_occurrence_distance,
                         probability_estimator: d_estimator,
                         bit_history,
+                        cost_trackers,
                     }
                 }
             }
@@ -161,5 +184,6 @@ pub trait HistorySource<'a> {
     fn gather_history_states(
         &self, context_states: &mut CollectedContextStates);
 
-    fn process_input_bit(&mut self, input_bit: Bit);
+    fn process_input_bit(&mut self, input_bit: Bit,
+                         new_cost_trackers: &[CostTrackers]);
 }

@@ -24,7 +24,7 @@ use demixer::fixed_point::{FixedPoint, FixI32, FixU32};
 use demixer::fixed_point::types::{FractOnlyU32, FractOnlyU64, StretchedProbD};
 use demixer::lut::LookUpTables;
 use demixer::lut::apm::ApmWeightingLut;
-use demixer::lut::estimator::DeceleratingEstimatorLut;
+use demixer::lut::estimator::DeceleratingEstimatorRates;
 use demixer::lut::squash::SquashLut;
 use demixer::lut::stretch::StretchLut;
 use demixer::mixing::apm::AdaptiveProbabilityMap;
@@ -88,7 +88,7 @@ fn test_single_apm_context(counters_num: usize) {
         LookUpTables::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS;
     let stretch_lut = StretchLut::new(false);
     let squash_lut = SquashLut::new(&stretch_lut, false);
-    let estimator_lut = DeceleratingEstimatorLut::make_default();
+    let estimator_rates_lut = DeceleratingEstimatorRates::make_default();
     let apm_lut = ApmWeightingLut::new(stretched_fract_index_bits, &squash_lut);
     let fixed_weight = false;
     for &(orig_model_freq, orig_real_freq, max_overhead) in [
@@ -130,7 +130,7 @@ fn test_single_apm_context(counters_num: usize) {
                         apm.refine(0, counter_sq, counter_st, &apm_lut);
                     let model_input_bit: Bit = ((model_prng.next_real2() >=
                         orig_model_freq) ^ flipped).into();
-                    counter.update(model_input_bit, &estimator_lut);
+                    counter.update(model_input_bit, &estimator_rates_lut);
                     let real_input_bit: Bit = ((real_prng.next_real2() >=
                         orig_real_freq) ^ flipped).into();
                     apm.update_predictions(0, real_input_bit, 10, fixed_weight);

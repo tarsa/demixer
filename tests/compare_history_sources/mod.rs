@@ -19,14 +19,16 @@ extern crate demixer;
 
 use demixer::PRINT_DEBUG;
 use demixer::bit::Bit;
+use demixer::estimators::cost::CostTracker;
 use demixer::history::{
-    HistorySource,
-    CollectedContextStates,
+    ContextState, CollectedContextStates, HistorySource,
 };
 use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
 use demixer::history::tree::TreeHistorySource;
+use demixer::history::tree::node::CostTrackers;
 use demixer::lut::LookUpTables;
+use demixer::random::MersenneTwister;
 
 pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool,
                          luts: &LookUpTables) {
@@ -40,6 +42,8 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool,
     let mut naive_source_results = CollectedContextStates::new(max_order);
     let mut fat_map_source_results = CollectedContextStates::new(max_order);
     let mut tree_source_results = CollectedContextStates::new(max_order);
+
+    let mut prng = MersenneTwister::default();
 
     for (index, byte) in input.iter().enumerate() {
         if run_naive {
@@ -66,8 +70,8 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool,
             tree_source.gather_history_states(&mut tree_source_results);
 
             if run_naive {
-                assert_eq!(naive_source_results.items(),
-                           fat_map_source_results.items(),
+                assert_eq!(neutralize_cost_trackers(&naive_source_results),
+                           neutralize_cost_trackers(&fat_map_source_results),
                            "index = {}, bit index = {}, input = {:?}",
                            index, bit_index, input);
             }
@@ -81,14 +85,35 @@ pub fn compare_for_input(input: &[u8], max_order: usize, run_naive: bool,
                        "index = {}, bit index = {}, input = {:?}",
                        index, bit_index, input);
 
+            let mut neutral_cost_trackers = Vec::new();
+            let mut random_cost_trackers = Vec::new();
+            for _ in tree_source_results.items().iter()
+                .filter(|c| c.is_for_node()) {
+                neutral_cost_trackers.push(CostTrackers::new(
+                    CostTracker::INITIAL, CostTracker::INITIAL));
+                random_cost_trackers.push(CostTrackers::new(
+                    CostTracker::new(prng.next_int64() as u16),
+                    CostTracker::new(prng.next_int64() as u16)));
+            }
+
             let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             if run_naive {
-                naive_source.process_input_bit(input_bit);
+                naive_source.process_input_bit(input_bit,
+                                               &neutral_cost_trackers);
             }
-            fat_map_source.process_input_bit(input_bit);
-            tree_source.process_input_bit(input_bit);
+            fat_map_source.process_input_bit(input_bit, &random_cost_trackers);
+            tree_source.process_input_bit(input_bit, &random_cost_trackers);
             if PRINT_DEBUG { println!(); }
         }
     }
+}
+
+fn neutralize_cost_trackers(context_states: &CollectedContextStates)
+                            -> Vec<ContextState> {
+    context_states.items().iter().map(|ctx| {
+        let mut ctx = ctx.clone();
+        ctx.neutralize_cost_trackers();
+        ctx
+    }).collect()
 }

@@ -16,6 +16,7 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 pub mod apm;
+pub mod cost;
 pub mod estimator;
 pub mod log2;
 pub mod squash;
@@ -23,15 +24,17 @@ pub mod stretch;
 
 use history::state::{TheHistoryStateFactory, HistoryStateFactory};
 use self::apm::ApmWeightingLut;
-use self::estimator::*;
+use self::cost::CostTrackersLut;
+use self::estimator::{DeceleratingEstimatorRates, DeceleratingEstimatorCache};
 use self::log2::Log2Lut;
 use self::squash::SquashLut;
 use self::stretch::StretchLut;
 
 pub struct LookUpTables {
     log2_lut: Log2Lut,
-    d_estimator_lut: DeceleratingEstimatorLut,
+    d_estimator_rates: DeceleratingEstimatorRates,
     d_estimator_cache: DeceleratingEstimatorCache,
+    cost_trackers_lut: CostTrackersLut,
     stretch_lut: StretchLut,
     squash_lut: SquashLut,
     apm_luts: [ApmWeightingLut;
@@ -43,9 +46,12 @@ impl LookUpTables {
     pub const APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS: u8 = 2;
 
     pub fn new() -> LookUpTables {
-        let d_estimator_lut = DeceleratingEstimatorLut::make_default();
+        let log2_lut = Log2Lut::new();
+        let d_estimator_rates = DeceleratingEstimatorRates::make_default();
         let d_estimator_cache =
-            DeceleratingEstimatorCache::new(&d_estimator_lut);
+            DeceleratingEstimatorCache::new(&d_estimator_rates);
+        let cost_trackers_lut =
+            CostTrackersLut::new(&log2_lut, &d_estimator_rates);
         let stretch_lut = StretchLut::new(false);
         let squash_lut = SquashLut::new(&stretch_lut, false);
         let apm_luts = [
@@ -54,9 +60,10 @@ impl LookUpTables {
             ApmWeightingLut::new(2, &squash_lut),
         ];
         LookUpTables {
-            log2_lut: Log2Lut::new(),
-            d_estimator_lut,
+            log2_lut,
+            d_estimator_rates,
             d_estimator_cache,
+            cost_trackers_lut,
             stretch_lut,
             squash_lut,
             apm_luts,
@@ -68,12 +75,16 @@ impl LookUpTables {
         &self.log2_lut
     }
 
-    pub fn d_estimator_lut(&self) -> &DeceleratingEstimatorLut {
-        &self.d_estimator_lut
+    pub fn d_estimator_rates(&self) -> &DeceleratingEstimatorRates {
+        &self.d_estimator_rates
     }
 
     pub fn d_estimator_cache(&self) -> &DeceleratingEstimatorCache {
         &self.d_estimator_cache
+    }
+
+    pub fn cost_trackers_lut(&self) -> &CostTrackersLut {
+        &self.cost_trackers_lut
     }
 
     pub fn stretch_lut(&self) -> &StretchLut {

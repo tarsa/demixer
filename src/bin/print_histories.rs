@@ -25,6 +25,7 @@ use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
 use demixer::history::state::HistoryState;
 use demixer::history::tree::TreeHistorySource;
+use demixer::history::tree::node::CostTrackers;
 use demixer::history::window::get_bit;
 use demixer::lut::LookUpTables;
 
@@ -34,7 +35,6 @@ fn main() {
     let file_name = args.get(2).expect("provide file name");
 
     let mut file = std::fs::File::open(file_name).expect("file not found");
-//    for byte in std::io::BufReader::new(file).bytes() {}
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer).unwrap();
     std::mem::drop(file);
@@ -73,7 +73,10 @@ fn print_bit_histories<'a, Source: HistorySource<'a>>(input: &[u8],
                 println!();
             }
             let incoming_bit = get_bit(x, bit_index);
-            history_source.process_input_bit(incoming_bit);
+            let new_cost_trackers = collected_states.items().iter()
+                .filter(|ctx| ctx.is_for_node()).map(|_| CostTrackers::DEFAULT)
+                .collect::<Vec<_>>();
+            history_source.process_input_bit(incoming_bit, &new_cost_trackers);
         }
         println!();
     }

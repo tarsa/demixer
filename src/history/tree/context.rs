@@ -21,10 +21,11 @@ use std::ops;
 
 use PRINT_DEBUG;
 use history::ContextState;
-use history::window::{InputWindow, WindowIndex};
-use lut::estimator::DeceleratingEstimatorLut;
+use history::window::WindowIndex;
+use lut::estimator::DeceleratingEstimatorRates;
 use super::{Tree, TreeState};
 use super::direction::Direction;
+use super::node::CostTrackers;
 use super::nodes::NodeIndex;
 
 
@@ -39,7 +40,8 @@ pub struct Context {
 
 impl Context {
     pub fn descend(&mut self, tree: &mut Tree, order: usize, bit_index: usize,
-                   lut: &DeceleratingEstimatorLut) {
+                   new_cost_trackers: CostTrackers,
+                   rates_lut: &DeceleratingEstimatorRates) {
         assert!(!self.in_leaf);
         let direction: Direction =
             tree.window.get_bit(tree.window.cursor(), bit_index).into();
@@ -53,7 +55,8 @@ impl Context {
                 node.right_count()
             }
         } as i32;
-        tree.nodes_mut()[node_index].increment_edge_counters(direction, lut);
+        tree.nodes_mut()[node_index].increment_edge_counters(
+            direction, new_cost_trackers, rates_lut);
         let child = tree.nodes()[node_index].child(direction);
         if child.is_window_index() {
             self.in_leaf = true;
@@ -69,16 +72,6 @@ impl Context {
         }
         if PRINT_DEBUG {
             println!("DESCEND, order = {}, after = {}", order, self);
-        }
-    }
-
-    pub fn prepare_for_test(&self, offset: usize,
-                            window: &InputWindow) -> Context {
-        Context {
-            suffix_index: window.index_subtract(self.suffix_index, offset),
-            node_index: NodeIndex::new(<usize>::max_value()),
-            incoming_edge_visits_count: 0,
-            ..self.clone()
         }
     }
 }

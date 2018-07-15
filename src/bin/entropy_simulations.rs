@@ -22,7 +22,7 @@ use demixer::coding::FinalProbability;
 use demixer::estimators::decelerating::DeceleratingEstimator;
 use demixer::fixed_point::{FixedPoint, FixI32, FixU32, FixI64};
 use demixer::fixed_point::types::Log2Q;
-use demixer::lut::estimator::DeceleratingEstimatorLut;
+use demixer::lut::estimator::DeceleratingEstimatorRates;
 use demixer::lut::log2::Log2Lut;
 
 fn main() {
@@ -36,7 +36,7 @@ fn main() {
             println!("single run length = {}", single_run_length);
             for &(factor, addend) in [(1, 2), (1, 3), (2, 2), (2, 3)].iter() {
                 print!("LUT: factor = {}, addend = {} ", factor, addend);
-                let lut = DeceleratingEstimatorLut::make(factor, addend);
+                let lut = DeceleratingEstimatorRates::make(factor, addend);
                 check_decelerating_estimator_single(probability, &lut, &log_lut,
                                                     single_run_length);
             }
@@ -46,7 +46,7 @@ fn main() {
 }
 
 fn check_decelerating_estimator_single(probability: f64,
-                                       lut: &DeceleratingEstimatorLut,
+                                       rates_lut: &DeceleratingEstimatorRates,
                                        log_lut: &Log2Lut,
                                        single_run_length: u32) {
     assert!(probability > 0.0 && probability < 1.0);
@@ -70,7 +70,7 @@ fn check_decelerating_estimator_single(probability: f64,
         if bit.is_0() {
             zeros += 1;
         }
-        estimator.update(bit, lut);
+        estimator.update(bit, rates_lut);
     }
     let ones = total_predictions - zeros;
     let real_probability = zeros as f64 / total_predictions as f64;

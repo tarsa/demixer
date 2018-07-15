@@ -23,11 +23,10 @@ use std::collections::hash_map::DefaultHasher;
 use bit::Bit;
 use lut::LookUpTables;
 use super::{
-    HistorySource,
-    ContextState,
-    CollectedContextStates,
+    ContextState, CollectedContextStates, HistorySource,
 };
 use super::window::{WindowIndex, InputWindow};
+use super::tree::node::CostTrackers;
 
 /// NOTE: last_occurrence_distance in fact holds last occurrence index
 pub struct FatMapHistorySource<'a> {
@@ -104,7 +103,8 @@ impl<'a> HistorySource<'a> for FatMapHistorySource<'a> {
         }
     }
 
-    fn process_input_bit(&mut self, input_bit: Bit) {
+    fn process_input_bit(&mut self, input_bit: Bit,
+                         new_cost_trackers: &[CostTrackers]) {
         for order in 0..(self.max_order.min(self.input.cursor().raw()) + 1) {
             let hash = self.compute_hash(order);
             let map = &mut self.maps[(order * 8) + self.bit_index];
@@ -120,10 +120,21 @@ impl<'a> HistorySource<'a> for FatMapHistorySource<'a> {
                     input.compare_for_equal_prefix(
                         byte_index, last_occurrence_index, bit_index, order)
                 })
-                .map(|ctx| *ctx =
-                    ctx.next_state(byte_index.raw(), input_bit, luts))
+                .map(|ctx| {
+                    let cost_trackers_opt =
+                        if ctx.is_for_node() {
+                            assert!(order < new_cost_trackers.len());
+                            Some(new_cost_trackers[order].clone())
+                        } else {
+                            assert!(order >= new_cost_trackers.len());
+                            None
+                        };
+                    *ctx = ctx.next_state(byte_index.raw(), input_bit,
+                                          cost_trackers_opt, luts)
+                })
                 .is_some();
             if !found {
+                assert!(order >= new_cost_trackers.len());
                 vec.push(ContextState::starting_state(byte_index.raw(),
                                                       input_bit));
             }

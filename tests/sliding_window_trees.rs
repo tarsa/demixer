@@ -19,9 +19,15 @@ extern crate demixer;
 
 use demixer::PRINT_DEBUG;
 use demixer::bit::Bit;
-use demixer::history::{CollectedContextStates, HistorySource};
+use demixer::history::{
+    ContextState, CollectedContextStates, HistorySource,
+};
 use demixer::history::tree::{Tree, TreeHistorySource, TreeState};
+use demixer::history::tree::context::Context;
 use demixer::history::tree::direction::Direction;
+use demixer::history::tree::node::CostTrackers;
+use demixer::history::tree::nodes::NodeIndex;
+use demixer::history::window::InputWindow;
 use demixer::lut::LookUpTables;
 
 #[test]
@@ -285,6 +291,8 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
         source_1.check_integrity_on_next_byte();
         for bit_index in (0..7 + 1).rev() {
             verify_live_nodes_count(&source_1.tree);
+            source_1_results.reset();
+            source_1.gather_history_states(&mut source_1_results);
             if PRINT_DEBUG {
                 println!("active contexts 1 = {}", source_1.active_contexts);
                 println!("before: index = {}, bit index = {}, prefix 1 = {:?}",
@@ -293,7 +301,9 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
 
             let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
-            source_1.process_input_bit(input_bit);
+            let source_1_cost_trackers =
+                make_neutral_cost_trackers(source_1_results.items());
+            source_1.process_input_bit(input_bit, &source_1_cost_trackers);
             if PRINT_DEBUG { println!(); }
         }
     }
@@ -311,6 +321,8 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
         source_2.check_integrity_on_next_byte();
         for bit_index in (0..7 + 1).rev() {
             verify_live_nodes_count(&source_2.tree);
+            source_2_results.reset();
+            source_2.gather_history_states(&mut source_2_results);
             if PRINT_DEBUG {
                 println!("active contexts 2 = {}", source_2.active_contexts);
                 println!("before: index = {}, bit index = {}, prefix 2 = {:?}",
@@ -319,7 +331,9 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
 
             let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
-            source_2.process_input_bit(input_bit);
+            let source_2_cost_trackers =
+                make_neutral_cost_trackers(source_2_results.items());
+            source_2.process_input_bit(input_bit, &source_2_cost_trackers);
             if PRINT_DEBUG { println!(); }
         }
     }
@@ -359,6 +373,10 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
         for bit_index in (0..7 + 1).rev() {
             verify_live_nodes_count(&source_1.tree);
             verify_live_nodes_count(&source_2.tree);
+            source_1_results.reset();
+            source_1.gather_history_states(&mut source_1_results);
+            source_2_results.reset();
+            source_2.gather_history_states(&mut source_2_results);
             if PRINT_DEBUG {
                 println!("active contexts 1 = {}", source_1.active_contexts);
                 println!("active contexts 2 = {}", source_2.active_contexts);
@@ -369,9 +387,13 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
             let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             if PRINT_DEBUG { println!("source 1"); }
-            source_1.process_input_bit(input_bit);
+            let source_1_cost_trackers =
+                make_neutral_cost_trackers(source_1_results.items());
+            source_1.process_input_bit(input_bit, &source_1_cost_trackers);
             if PRINT_DEBUG { println!("source 2"); }
-            source_2.process_input_bit(input_bit);
+            let source_2_cost_trackers =
+                make_neutral_cost_trackers(source_2_results.items());
+            source_2.process_input_bit(input_bit, &source_2_cost_trackers);
             if PRINT_DEBUG { println!(); }
         }
     }
@@ -426,10 +448,10 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
 
             assert_eq!(
                 source_1.active_contexts.items().iter().map(
-                    |ctx| ctx.prepare_for_test(offset_1, &source_1.tree.window)
+                    |ctx| prepare_for_test(ctx, offset_1, &source_1.tree.window)
                 ).collect::<Vec<_>>(),
                 source_2.active_contexts.items().iter().map(
-                    |ctx| ctx.prepare_for_test(offset_2, &source_2.tree.window)
+                    |ctx| prepare_for_test(ctx, offset_2, &source_2.tree.window)
                 ).collect::<Vec<_>>()
             );
 
@@ -446,9 +468,13 @@ fn compare_for_input(prefix_1: &[u8], prefix_2: &[u8], common: &[u8],
             let input_bit: Bit = ((byte & (1 << bit_index)) != 0).into();
             if PRINT_DEBUG { println!("processing bit: {}", input_bit); }
             if PRINT_DEBUG { println!("source 1"); }
-            source_1.process_input_bit(input_bit);
+            let source_1_cost_trackers =
+                make_neutral_cost_trackers(source_1_results.items());
+            source_1.process_input_bit(input_bit, &source_1_cost_trackers);
             if PRINT_DEBUG { println!("source 2"); }
-            source_2.process_input_bit(input_bit);
+            let source_2_cost_trackers =
+                make_neutral_cost_trackers(source_2_results.items());
+            source_2.process_input_bit(input_bit, &source_2_cost_trackers);
             if PRINT_DEBUG { println!(); }
         }
     }
@@ -567,4 +593,22 @@ fn compare_shape(offset_1: usize, tree_1: &Tree,
                tree_2.nodes().live_nodes_count());
     assert_eq!(tree_1.nodes().live_nodes_count(), visited_nodes_1);
     assert_eq!(tree_2.nodes().live_nodes_count(), visited_nodes_2);
+}
+
+fn make_neutral_cost_trackers(context_states: &[ContextState])
+                              -> Vec<CostTrackers> {
+    context_states.iter()
+        .filter(|ctx| ctx.is_for_node())
+        .map(|_| CostTrackers::DEFAULT)
+        .collect()
+}
+
+fn prepare_for_test(context: &Context, offset: usize,
+                        window: &InputWindow) -> Context {
+    Context {
+        suffix_index: window.index_subtract(context.suffix_index, offset),
+        node_index: NodeIndex::new(<usize>::max_value()),
+        incoming_edge_visits_count: 0,
+        ..context.clone()
+    }
 }

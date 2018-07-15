@@ -18,7 +18,7 @@
 use bit::Bit;
 use fixed_point::{FixedPoint, fix_i64};
 use fixed_point::types::FractOnlyU32;
-use lut::estimator::*;
+use lut::estimator::DeceleratingEstimatorRates;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DeceleratingEstimator(u32);
@@ -71,7 +71,7 @@ impl DeceleratingEstimator {
         (self.0 as u16) & ((1 << Self::COUNT_BITS) - 1)
     }
 
-    pub fn update(&mut self, value: Bit, lut: &DeceleratingEstimatorLut) {
+    pub fn update(&mut self, value: Bit, lut: &DeceleratingEstimatorRates) {
         let prediction_bits = FractOnlyU32::FRACTIONAL_BITS;
         let factor_bits = FractOnlyU32::FRACTIONAL_BITS;
         let prediction = self.prediction().raw();
