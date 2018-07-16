@@ -53,6 +53,18 @@ impl HistoryState for RecentBitsState {
         (leading_bit | capped) as u8
     }
 
+    fn last_bit_run(&self) -> (u8, Bit) {
+        if (self.0.wrapping_add(1)) & self.0 == 0 {
+            let run_length = Self::MAX_LENGTH - self.0.leading_zeros() as u8;
+            (run_length, Bit::One)
+        } else {
+            let last_bit: Bit = (self.0 & 1 == 1).into();
+            let mask = if last_bit.is_1() { 0xffff } else { 0 };
+            let run_length = (self.0 ^ mask).trailing_zeros() as u8;
+            (run_length, last_bit)
+        }
+    }
+
     fn updated(&self, next_bit: Bit) -> Self {
         let highest_leading_bit = self.0 & (1 << Self::MAX_LENGTH);
         let shifted = ((self.0 << 1) + next_bit.to_u16()) & Self::MASK;

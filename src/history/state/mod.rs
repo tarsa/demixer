@@ -33,6 +33,8 @@ pub trait HistoryState: Sized + Copy + Clone + Eq {
     /** Last few bits with leading 1 */
     fn last_bits(&self) -> u8;
 
+    fn last_bit_run(&self) -> (u8, Bit);
+
     fn updated(&self, next_bit: Bit) -> Self;
 }
 

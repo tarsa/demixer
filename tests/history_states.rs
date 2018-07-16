@@ -31,19 +31,26 @@ fn history_states_are_properly_reported_as_valid() {
 
 #[test]
 fn recent_bits_state_returns_proper_substates() {
-    for &(full_state, compressed_state, last_7_bits) in [
-        (0x8000, 0x0f, 0x80),
-        (0xffff, 0xf0, 0xff),
-        (0x7777, 0xb3, 0xf7),
-        (0x1111, 0x39, 0x91),
-        (0x0001, 0x00, 0x01),
-        (0x0002, 0x01, 0x02),
-        (0x0003, 0x10, 0x03),
+    for &(full_state, compressed_state, last_7_bits, bit_run) in [
+        (0x0001, 0x00, 0x01, (0, Bit::One)),
+        (0x0002, 0x01, 0x02, (1, Bit::Zero)),
+        (0x0003, 0x10, 0x03, (1, Bit::One)),
+        (0x0004, 0x02, 0x04, (2, Bit::Zero)),
+        (0x0005, 0x11, 0x05, (1, Bit::One)),
+        (0x0006, 0x11, 0x06, (1, Bit::Zero)),
+        (0x0007, 0x20, 0x07, (2, Bit::One)),
+        (0x4888, 0x3b, 0x88, (3, Bit::Zero)),
+        (0x7777, 0xb3, 0xf7, (3, Bit::One)),
+        (0x1eee, 0x93, 0xee, (1, Bit::Zero)),
+        (0x1111, 0x39, 0x91, (1, Bit::One)),
+        (0x8000, 0x0f, 0x80, (15, Bit::Zero)),
+        (0xffff, 0xf0, 0xff, (15, Bit::One)),
     ].iter() {
         let state = RecentBitsState::new_unchecked(full_state);
         assert!(state.is_valid());
         assert_eq!(state.compressed_state(), compressed_state);
         assert_eq!(state.last_bits(), last_7_bits);
+        assert_eq!(state.last_bit_run(), bit_run);
     }
 }
 
