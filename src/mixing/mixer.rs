@@ -68,11 +68,10 @@ pub trait Mixer where Self: MixerData {
                -> (FractOnlyU32, StretchedProbD) {
         assert_eq!(self.common().inputs_mask, (1u32 << self.size()) - 1);
         let mut result = StretchedProbQ::ZERO;
-        for index in 0usize..self.size() {
-            result = result.add(&fix_i32::mul_wide(
-                &self.inputs()[index].weight,
-                &self.prediction_st(index),
-            ));
+        for input in self.inputs().iter() {
+            let weighted_input =
+                fix_i32::mul_wide(&input.weight, &input.prediction_st);
+            result = result.add(&weighted_input);
         }
         let result_st: StretchedProbD = result.clamped().to_fix_i32();
         let result_sq = squash_lut.squash(result_st);
@@ -93,11 +92,10 @@ pub trait Mixer where Self: MixerData {
                 let error = FractOnlyI32::new(error.raw() as i32, 31);
                 let update_factor: FractOnlyI32 =
                     fix_i32::mul(&error, &update_factor);
-                for index in 0usize..self.size() {
-                    let weight = self.weight(index);
-                    let weight = weight.add(&fix_i32::mul(
-                        &self.prediction_st(index), &update_factor));
-                    self.inputs_mut()[index].weight = weight.clamped();
+                for input in self.inputs_mut().iter_mut() {
+                    let weighted_error =
+                        fix_i32::mul(&input.prediction_st, &update_factor);
+                    input.weight = input.weight.add(&weighted_error).clamped();
                 }
             }
             Bit::One => {
@@ -105,11 +103,10 @@ pub trait Mixer where Self: MixerData {
                 let error = FractOnlyI32::new(error.raw() as i32, 31);
                 let update_factor: FractOnlyI32 =
                     fix_i32::mul(&error, &update_factor);
-                for index in 0usize..self.size() {
-                    let weight = self.weight(index);
-                    let weight = weight.sub(&fix_i32::mul(
-                        &self.prediction_st(index), &update_factor));
-                    self.inputs_mut()[index].weight = weight.clamped();
+                for input in self.inputs_mut().iter_mut() {
+                    let weighted_error =
+                        fix_i32::mul(&input.prediction_st, &update_factor);
+                    input.weight = input.weight.sub(&weighted_error).clamped();
                 }
             }
         }
@@ -144,9 +141,7 @@ impl MixerInput {
 
     fn new_array_neutral(size: usize) -> Box<[Self]> {
         let mut vec = Vec::new();
-        for _ in 0..size {
-            vec.push(MixerInput::NEUTRAL);
-        }
+        for _ in 0..size { vec.push(MixerInput::NEUTRAL) }
         vec.into_boxed_slice()
     }
 }
@@ -222,6 +217,30 @@ pub trait FixedSizeMixer where Self: MixerData {
         result
     }
     fn new_neutral(initial_update_factor_index: u16) -> Self;
+}
+
+pub struct Mixer1 {
+    inputs: [MixerInput; 1],
+    common: MixerCommon,
+}
+
+impl FixedSizeMixer for Mixer1 {
+    const SIZE: usize = 1;
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
+        Mixer1 {
+            inputs: [MixerInput::NEUTRAL],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
+    }
+}
+
+impl MixerData for Mixer1 {
+    fn size(&self) -> usize { Self::SIZE }
+    fn inputs(&self) -> &[MixerInput] { &self.inputs }
+    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
+    fn common(&self) -> &MixerCommon { &self.common }
+    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
 }
 
 pub struct Mixer2 {

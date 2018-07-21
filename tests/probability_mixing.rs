@@ -25,13 +25,14 @@ use demixer::lut::estimator::DeceleratingEstimatorRates;
 use demixer::lut::squash::SquashLut;
 use demixer::lut::stretch::StretchLut;
 use demixer::mixing::mixer::{
-    Mixer, MixerN, FixedSizeMixer, Mixer2, Mixer3, Mixer4, Mixer5,
+    Mixer, MixerN, FixedSizeMixer, Mixer1, Mixer2, Mixer3, Mixer4, Mixer5,
 };
 use demixer::random::MersenneTwister;
 
 #[test]
 fn mixers_pass_self_checks() {
     MixerN::new(30, 10, false);
+    Mixer1::new(10, false);
     Mixer2::new(10, false);
     Mixer3::new(10, false);
     Mixer4::new(10, false);
@@ -41,6 +42,10 @@ fn mixers_pass_self_checks() {
 #[test]
 fn mixing_converges_to_real_probability() {
     mixer_converges_to_real_probability(|| MixerN::new(1, 10, false), &[
+        (&[0.2], 0.5),
+        (&[0.1], 0.01),
+    ], 0.01);
+    mixer_converges_to_real_probability(|| Mixer1::new(10, false), &[
         (&[0.2], 0.5),
         (&[0.1], 0.01),
     ], 0.01);
@@ -136,6 +141,9 @@ fn mixer_converges_to_real_probability<Mxr: Mixer>(
 #[test]
 fn mixing_is_symmetric() {
     mixer_is_symmetric(|| MixerN::new(1, 10, true), &[
+        (&[0.2], 0.5), (&[0.1], 0.01),
+    ]);
+    mixer_is_symmetric(|| Mixer1::new(10, true), &[
         (&[0.2], 0.5), (&[0.1], 0.01),
     ]);
     mixer_is_symmetric(|| Mixer2::new(10, true), &[
