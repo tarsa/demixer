@@ -15,6 +15,29 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-pub mod hash;
-pub mod indexer;
-pub mod quantizers;
+pub struct Fnv1A(u64);
+
+impl Fnv1A {
+    pub fn new() -> Self {
+        Fnv1A(0xcbf29ce484222325)
+    }
+
+    pub fn mix_byte(&mut self, input_byte: u8) {
+        self.0 ^= input_byte as u64;
+        self.0 = self.0.wrapping_mul(0x100000001b3);
+    }
+
+    pub fn into_u64(self) -> u64 {
+        self.0
+    }
+
+    pub fn into_u32(self) -> u32 {
+        let raw = self.0;
+        (raw ^ (raw >> 32)) as u32
+    }
+
+    pub fn into_u16(self) -> u16 {
+        let raw = self.into_u32();
+        (raw ^ (raw >> 16)) as u16
+    }
+}
