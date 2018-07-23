@@ -22,7 +22,7 @@ use history::state::{HistoryState, HistoryStateFactory};
 pub struct RecentBitsState(u16);
 
 impl RecentBitsState {
-    const MAX_LENGTH: u8 = 15;
+    pub const MAX_LENGTH: u8 = 15;
 
     const MASK: u16 = (1u16 << Self::MAX_LENGTH) - 1 + (1 << Self::MAX_LENGTH);
 

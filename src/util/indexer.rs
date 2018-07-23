@@ -45,6 +45,7 @@ pub trait Indexer where Self: Sized {
         self.common_mut().current_input_index += 1;
         self
     }
+
     fn get_array_index_and_reset(&mut self) -> usize {
         let current_input_index = self.common_mut().current_input_index;
         assert_eq!(current_input_index, self.inputs_num());

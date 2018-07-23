@@ -24,6 +24,7 @@ pub mod fixed_point;
 pub mod history;
 pub mod lut;
 pub mod mixing;
+pub mod predictor;
 pub mod random;
 pub mod util;
 

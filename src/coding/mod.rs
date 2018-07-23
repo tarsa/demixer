@@ -24,7 +24,7 @@ use fixed_point::types::Log2D;
 use lut::log2::Log2Lut;
 
 /** Probability of bit 0 */
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FinalProbability(u32);
 
 impl FinalProbability {

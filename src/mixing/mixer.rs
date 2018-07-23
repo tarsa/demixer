@@ -124,6 +124,7 @@ fn update_factor_index<T: Mixer>(this: &T) -> u16 {
 
 impl<T: MixerData> Mixer for T {}
 
+#[derive(Clone)]
 pub struct MixerInput {
     weight: MixerWeight,
     prediction_sq: FractOnlyU32,
@@ -140,12 +141,11 @@ impl MixerInput {
     };
 
     fn new_array_neutral(size: usize) -> Box<[Self]> {
-        let mut vec = Vec::new();
-        for _ in 0..size { vec.push(MixerInput::NEUTRAL) }
-        vec.into_boxed_slice()
+        vec![MixerInput::NEUTRAL; size].into_boxed_slice()
     }
 }
 
+#[derive(Clone)]
 pub struct MixerCommon {
     inputs_mask: u32,
     update_factor_index: u16,
@@ -172,6 +172,146 @@ fn initialize_weights<Mixer: MixerData>(mixer: &mut Mixer, neutral: bool) {
     if !neutral {
         mixer.inputs_mut()[0].weight = MixerWeight::ONE;
     }
+}
+
+pub trait FixedSizeMixer where Self: MixerData {
+    const SIZE: usize;
+    fn new(initial_update_factor_index: u16, neutral: bool) -> Self {
+        let mut result: Self = Self::new_neutral(initial_update_factor_index);
+        assert_eq!(result.inputs().len(), Self::SIZE);
+        initialize_weights(&mut result, neutral);
+        result
+    }
+    fn new_neutral(initial_update_factor_index: u16) -> Self;
+}
+
+#[derive(Clone)]
+pub struct Mixer1 {
+    inputs: [MixerInput; 1],
+    common: MixerCommon,
+}
+
+impl FixedSizeMixer for Mixer1 {
+    const SIZE: usize = 1;
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
+        Mixer1 {
+            inputs: [MixerInput::NEUTRAL],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
+    }
+}
+
+impl MixerData for Mixer1 {
+    fn size(&self) -> usize { Self::SIZE }
+    fn inputs(&self) -> &[MixerInput] { &self.inputs }
+    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
+    fn common(&self) -> &MixerCommon { &self.common }
+    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
+}
+
+#[derive(Clone)]
+pub struct Mixer2 {
+    inputs: [MixerInput; 2],
+    common: MixerCommon,
+}
+
+impl FixedSizeMixer for Mixer2 {
+    const SIZE: usize = 2;
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
+        let n = || MixerInput::NEUTRAL;
+        Mixer2 {
+            inputs: [n(), n()],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
+    }
+}
+
+impl MixerData for Mixer2 {
+    fn size(&self) -> usize { Self::SIZE }
+    fn inputs(&self) -> &[MixerInput] { &self.inputs }
+    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
+    fn common(&self) -> &MixerCommon { &self.common }
+    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
+}
+
+#[derive(Clone)]
+pub struct Mixer3 {
+    inputs: [MixerInput; 3],
+    common: MixerCommon,
+}
+
+impl FixedSizeMixer for Mixer3 {
+    const SIZE: usize = 3;
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
+        let n = || MixerInput::NEUTRAL;
+        Mixer3 {
+            inputs: [n(), n(), n()],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
+    }
+}
+
+impl MixerData for Mixer3 {
+    fn size(&self) -> usize { Self::SIZE }
+    fn inputs(&self) -> &[MixerInput] { &self.inputs }
+    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
+    fn common(&self) -> &MixerCommon { &self.common }
+    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
+}
+
+#[derive(Clone)]
+pub struct Mixer4 {
+    inputs: [MixerInput; 4],
+    common: MixerCommon,
+}
+
+impl FixedSizeMixer for Mixer4 {
+    const SIZE: usize = 4;
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
+        let n = || MixerInput::NEUTRAL;
+        Mixer4 {
+            inputs: [n(), n(), n(), n()],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
+    }
+}
+
+impl MixerData for Mixer4 {
+    fn size(&self) -> usize { Self::SIZE }
+    fn inputs(&self) -> &[MixerInput] { &self.inputs }
+    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
+    fn common(&self) -> &MixerCommon { &self.common }
+    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
+}
+
+#[derive(Clone)]
+pub struct Mixer5 {
+    inputs: [MixerInput; 5],
+    common: MixerCommon,
+}
+
+impl FixedSizeMixer for Mixer5 {
+    const SIZE: usize = 5;
+    fn new_neutral(initial_update_factor_index: u16) -> Self {
+        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
+        let n = || MixerInput::NEUTRAL;
+        Mixer5 {
+            inputs: [n(), n(), n(), n(), n()],
+            common: MixerCommon::new(initial_update_factor_index),
+        }
+    }
+}
+
+impl MixerData for Mixer5 {
+    fn size(&self) -> usize { Self::SIZE }
+    fn inputs(&self) -> &[MixerInput] { &self.inputs }
+    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
+    fn common(&self) -> &MixerCommon { &self.common }
+    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
 }
 
 pub struct MixerN {
@@ -202,141 +342,6 @@ impl MixerN {
 
 impl MixerData for MixerN {
     fn size(&self) -> usize { self.inputs.len() }
-    fn inputs(&self) -> &[MixerInput] { &self.inputs }
-    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
-    fn common(&self) -> &MixerCommon { &self.common }
-    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
-}
-
-pub trait FixedSizeMixer where Self: MixerData {
-    const SIZE: usize;
-    fn new(initial_update_factor_index: u16, neutral: bool) -> Self {
-        let mut result: Self = Self::new_neutral(initial_update_factor_index);
-        assert_eq!(result.inputs().len(), Self::SIZE);
-        initialize_weights(&mut result, neutral);
-        result
-    }
-    fn new_neutral(initial_update_factor_index: u16) -> Self;
-}
-
-pub struct Mixer1 {
-    inputs: [MixerInput; 1],
-    common: MixerCommon,
-}
-
-impl FixedSizeMixer for Mixer1 {
-    const SIZE: usize = 1;
-    fn new_neutral(initial_update_factor_index: u16) -> Self {
-        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
-        Mixer1 {
-            inputs: [MixerInput::NEUTRAL],
-            common: MixerCommon::new(initial_update_factor_index),
-        }
-    }
-}
-
-impl MixerData for Mixer1 {
-    fn size(&self) -> usize { Self::SIZE }
-    fn inputs(&self) -> &[MixerInput] { &self.inputs }
-    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
-    fn common(&self) -> &MixerCommon { &self.common }
-    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
-}
-
-pub struct Mixer2 {
-    inputs: [MixerInput; 2],
-    common: MixerCommon,
-}
-
-impl FixedSizeMixer for Mixer2 {
-    const SIZE: usize = 2;
-    fn new_neutral(initial_update_factor_index: u16) -> Self {
-        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
-        let n = || MixerInput::NEUTRAL;
-        Mixer2 {
-            inputs: [n(), n()],
-            common: MixerCommon::new(initial_update_factor_index),
-        }
-    }
-}
-
-impl MixerData for Mixer2 {
-    fn size(&self) -> usize { Self::SIZE }
-    fn inputs(&self) -> &[MixerInput] { &self.inputs }
-    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
-    fn common(&self) -> &MixerCommon { &self.common }
-    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
-}
-
-pub struct Mixer3 {
-    inputs: [MixerInput; 3],
-    common: MixerCommon,
-}
-
-impl FixedSizeMixer for Mixer3 {
-    const SIZE: usize = 3;
-    fn new_neutral(initial_update_factor_index: u16) -> Self {
-        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
-        let n = || MixerInput::NEUTRAL;
-        Mixer3 {
-            inputs: [n(), n(), n()],
-            common: MixerCommon::new(initial_update_factor_index),
-        }
-    }
-}
-
-impl MixerData for Mixer3 {
-    fn size(&self) -> usize { Self::SIZE }
-    fn inputs(&self) -> &[MixerInput] { &self.inputs }
-    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
-    fn common(&self) -> &MixerCommon { &self.common }
-    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
-}
-
-pub struct Mixer4 {
-    inputs: [MixerInput; 4],
-    common: MixerCommon,
-}
-
-impl FixedSizeMixer for Mixer4 {
-    const SIZE: usize = 4;
-    fn new_neutral(initial_update_factor_index: u16) -> Self {
-        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
-        let n = || MixerInput::NEUTRAL;
-        Mixer4 {
-            inputs: [n(), n(), n(), n()],
-            common: MixerCommon::new(initial_update_factor_index),
-        }
-    }
-}
-
-impl MixerData for Mixer4 {
-    fn size(&self) -> usize { Self::SIZE }
-    fn inputs(&self) -> &[MixerInput] { &self.inputs }
-    fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
-    fn common(&self) -> &MixerCommon { &self.common }
-    fn common_mut(&mut self) -> &mut MixerCommon { &mut self.common }
-}
-
-pub struct Mixer5 {
-    inputs: [MixerInput; 5],
-    common: MixerCommon,
-}
-
-impl FixedSizeMixer for Mixer5 {
-    const SIZE: usize = 5;
-    fn new_neutral(initial_update_factor_index: u16) -> Self {
-        assert!(initial_update_factor_index <= UPDATE_FACTOR_INDEX_LIMIT);
-        let n = || MixerInput::NEUTRAL;
-        Mixer5 {
-            inputs: [n(), n(), n(), n(), n()],
-            common: MixerCommon::new(initial_update_factor_index),
-        }
-    }
-}
-
-impl MixerData for Mixer5 {
-    fn size(&self) -> usize { Self::SIZE }
     fn inputs(&self) -> &[MixerInput] { &self.inputs }
     fn inputs_mut(&mut self) -> &mut [MixerInput] { &mut self.inputs }
     fn common(&self) -> &MixerCommon { &self.common }

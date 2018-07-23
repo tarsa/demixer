@@ -34,15 +34,18 @@ pub struct CostTrackers {
 }
 
 impl CostTrackers {
-    pub const DEFAULT: Self =
-        CostTrackers {
-            stationary: CostTracker::INITIAL,
-            non_stationary: CostTracker::INITIAL,
-        };
+    pub const DEFAULT: Self = CostTrackers {
+        stationary: CostTracker::INITIAL,
+        non_stationary: CostTracker::INITIAL,
+    };
 
     pub fn new(stationary: CostTracker, non_stationary: CostTracker) -> Self {
         CostTrackers { stationary, non_stationary }
     }
+
+    pub fn stationary(&self) -> CostTracker { self.stationary }
+
+    pub fn non_stationary(&self) -> CostTracker { self.non_stationary }
 }
 
 #[derive(Clone)]

@@ -25,7 +25,7 @@ use demixer::lut::estimator::DeceleratingEstimatorRates;
 use demixer::lut::squash::SquashLut;
 use demixer::lut::stretch::StretchLut;
 use demixer::mixing::mixer::{
-    Mixer, MixerN, FixedSizeMixer, Mixer1, Mixer2, Mixer3, Mixer4, Mixer5,
+    Mixer, FixedSizeMixer, Mixer1, Mixer2, Mixer3, Mixer4, Mixer5, MixerN,
 };
 use demixer::random::MersenneTwister;
 

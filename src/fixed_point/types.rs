@@ -223,7 +223,7 @@ impl FixedPoint for Log2D {
     const FRACTIONAL_BITS: u8 = Log2Lut::INDEX_BITS;
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Log2Q(i64);
 
 impl FixedPoint for Log2Q {
@@ -270,8 +270,10 @@ impl StretchedProbD {
     }
 
     pub fn to_interval_index(&self, fract_index_bits: u8) -> i32 {
+        let max_raw = (Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS) - 1;
+        let raw = self.raw().min(max_raw);
         let offset = Self::ABSOLUTE_LIMIT << fract_index_bits;
-        offset + (self.raw() >> Self::FRACTIONAL_BITS - fract_index_bits)
+        offset + (raw >> Self::FRACTIONAL_BITS - fract_index_bits)
     }
 }
 

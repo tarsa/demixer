@@ -1,5 +1,11 @@
 # Releases
 
+### Version 0.9.0
+
+- Implemented actual context mixing
+  - main program now estimates compression ratio instead of printing bit
+    histories
+
 ### Version 0.8.0
 
 - Implemented probability refinement (APM/ SSE)
