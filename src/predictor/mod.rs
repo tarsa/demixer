@@ -25,13 +25,13 @@ use coding::FinalProbability;
 use history::{CollectedContextStates, HistorySource};
 use history::tree::TreeHistorySource;
 use lut::LookUpTables;
+use util::last_bytes::LastBytesCache;
 use self::chain::ContextsChainPredictionMixer;
 use self::post_process::PredictionFinalizer;
 use self::stats::PredictionStatistics;
 
 pub struct Predictor<'a> {
-    bit_index: i32,
-    current_byte: u8,
+    last_bytes: LastBytesCache,
     tree_source: TreeHistorySource<'a>,
     contexts_chain: CollectedContextStates,
     contexts_chain_predictor: ContextsChainPredictionMixer<'a>,
@@ -46,8 +46,7 @@ impl<'a> Predictor<'a> {
     pub fn new(luts: &'a LookUpTables) -> Self {
         let max_order = Self::MAX_ORDER;
         Predictor {
-            bit_index: -1,
-            current_byte: 0,
+            last_bytes: LastBytesCache::new(),
             tree_source: TreeHistorySource::new(10_000_000, max_order, luts),
             contexts_chain: CollectedContextStates::new(max_order),
             contexts_chain_predictor: ContextsChainPredictionMixer::new(
@@ -60,9 +59,7 @@ impl<'a> Predictor<'a> {
 
     pub fn start_new_byte(&mut self) {
         assert_eq!(self.final_probability_opt, None);
-        assert_eq!(self.bit_index, -1);
-        self.bit_index = 7;
-        self.current_byte = 1;
+        self.last_bytes.start_new_byte();
         self.tree_source.start_new_byte();
         self.statistics.start_new_byte();
     }
@@ -74,33 +71,30 @@ impl<'a> Predictor<'a> {
         self.tree_source.gather_history_states(&mut self.contexts_chain);
 
         let mixed_probability = self.contexts_chain_predictor
-            .predict(&self.contexts_chain, self.current_byte);
+            .predict(&self.contexts_chain, self.last_bytes.current_byte());
 
         let final_probability = self.prediction_finalizer.refine(
-            mixed_probability.0, mixed_probability.1, self.current_byte);
+            mixed_probability.0, mixed_probability.1, &self.last_bytes);
         self.final_probability_opt = Some(final_probability);
         final_probability
     }
 
     pub fn update(&mut self, input_bit: Bit) {
         assert_ne!(self.final_probability_opt, None);
-        assert!(self.bit_index >= 0);
 
         let cost_trackers = self.contexts_chain_predictor
             .update(input_bit, &self.contexts_chain);
 
         self.tree_source.process_input_bit(input_bit, &cost_trackers);
 
-        self.prediction_finalizer.update(input_bit, self.current_byte);
+        self.prediction_finalizer.update(input_bit, &self.last_bytes);
 
         self.statistics.on_next_bit(input_bit, &self.contexts_chain,
                                     self.final_probability_opt.unwrap());
         self.final_probability_opt = None;
 
         // updating this must be the last update step
-        self.bit_index -= 1;
-        self.current_byte <<= 1;
-        self.current_byte += input_bit.to_u8();
+        self.last_bytes.on_next_bit(input_bit);
     }
 
     pub fn print_state(&self) {

@@ -21,6 +21,7 @@ use fixed_point::FixU32;
 use fixed_point::types::{FractOnlyU32, StretchedProbD};
 use lut::LookUpTables;
 use mixing::apm::AdaptiveProbabilityMap;
+use util::last_bytes::LastBytesCache;
 
 pub struct PredictionFinalizer<'a> {
     luts: &'a LookUpTables,
@@ -38,14 +39,15 @@ impl<'a> PredictionFinalizer<'a> {
     }
 
     pub fn refine(&mut self, input_sq: FractOnlyU32, input_st: StretchedProbD,
-                  current_byte: u8) -> FinalProbability {
+                  last_bytes: &LastBytesCache) -> FinalProbability {
         let refined_sq = self.phase0_order0.refine(
-            current_byte as usize, input_sq, input_st, self.luts.apm_lut(1));
+            last_bytes.current_byte() as usize, input_sq, input_st,
+            self.luts.apm_lut(1));
         refined_sq.to_fix_u32()
     }
 
-    pub fn update(&mut self, input_bit: Bit, current_byte: u8) {
+    pub fn update(&mut self, input_bit: Bit, last_bytes: &LastBytesCache) {
         self.phase0_order0.update_predictions(
-            current_byte as usize, input_bit, 10, true);
+            last_bytes.current_byte() as usize, input_bit, 10, true);
     }
 }

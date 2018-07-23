@@ -17,4 +17,5 @@
  */
 pub mod hash;
 pub mod indexer;
+pub mod last_bytes;
 pub mod quantizers;
