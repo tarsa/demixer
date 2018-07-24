@@ -20,7 +20,7 @@ use fixed_point::types::{FractOnlyU32, StretchedProbD};
 use history::{ContextState, CollectedContextStates};
 use history::tree::node::CostTrackers;
 use lut::LookUpTables;
-use mixing::mixer::{Mixer, FixedSizeMixer, Mixer2};
+use mixing::mixer::{MixerInitializationMode, Mixer, FixedSizeMixer, Mixer2};
 use util::indexer::{Indexer, Indexer5};
 use super::single::SingleContextPredictor;
 
@@ -55,7 +55,9 @@ impl<'a> ContextsChainPredictionMixer<'a> {
         ContextsChainPredictionMixer {
             luts,
             single_context_predictors,
-            mixers: vec![Mixer2::new(8, false); mixer_indexer.get_array_size()],
+            mixers: vec![
+                Mixer2::new(8, MixerInitializationMode::DominantFirst);
+                mixer_indexer.get_array_size()],
             mixer_indexer,
             mixer_indices: vec![-1; max_order + 1],
             mixed_probability_opt: None,

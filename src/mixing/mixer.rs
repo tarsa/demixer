@@ -25,6 +25,18 @@ use fixed_point::types::{
 use lut::estimator::DeceleratingEstimatorRates;
 use lut::squash::SquashLut;
 
+#[derive(Clone, Copy)]
+pub enum MixerInitializationMode { AllZero, DominantFirst, EqualSummingToOne }
+
+impl MixerInitializationMode {
+    fn flat_mixer_weight(inputs_count: usize) -> MixerWeight {
+        assert_ne!(inputs_count, 0);
+        let one_raw = MixerWeight::ONE.raw();
+        let weight_raw = fix_i32::div(one_raw, inputs_count as i32);
+        MixerWeight::new(weight_raw, MixerWeight::FRACTIONAL_BITS)
+    }
+}
+
 const UPDATE_FACTOR_INDEX_LIMIT: u16 = DeceleratingEstimator::MAX_COUNT;
 
 fn fixed_update_factor() -> FractOnlyI32 {
@@ -168,18 +180,34 @@ pub trait MixerData where Self: Sized {
     fn common_mut(&mut self) -> &mut MixerCommon;
 }
 
-fn initialize_weights<Mixer: MixerData>(mixer: &mut Mixer, neutral: bool) {
-    if !neutral {
-        mixer.inputs_mut()[0].weight = MixerWeight::ONE;
+fn initialize_weights<Mixer: MixerData, MakeF: Fn() -> MixerWeight>(
+    mixer: &mut Mixer, initialization_mode: MixerInitializationMode,
+    make_flat_weight: MakeF,
+) {
+    match initialization_mode {
+        MixerInitializationMode::AllZero => (),
+        MixerInitializationMode::DominantFirst => {
+            mixer.inputs_mut()[0].weight = MixerWeight::ONE
+        }
+        MixerInitializationMode::EqualSummingToOne => {
+            let flat_weight = make_flat_weight();
+            mixer.inputs_mut().iter_mut().for_each(|input|
+                input.weight = flat_weight);
+        }
     }
 }
 
 pub trait FixedSizeMixer where Self: MixerData {
     const SIZE: usize;
-    fn new(initial_update_factor_index: u16, neutral: bool) -> Self {
+    const FLAT_WEIGHT: MixerWeight =
+        MixerWeight((1i32 << MixerWeight::FRACTIONAL_BITS) / Self::SIZE as i32);
+
+    fn new(initial_update_factor_index: u16,
+           initialization_mode: MixerInitializationMode) -> Self {
         let mut result: Self = Self::new_neutral(initial_update_factor_index);
         assert_eq!(result.inputs().len(), Self::SIZE);
-        initialize_weights(&mut result, neutral);
+        initialize_weights(&mut result, initialization_mode,
+                           || Self::FLAT_WEIGHT);
         result
     }
     fn new_neutral(initial_update_factor_index: u16) -> Self;
@@ -321,12 +349,13 @@ pub struct MixerN {
 
 impl MixerN {
     pub fn new(size: usize, initial_update_factor_index: u16,
-               neutral: bool) -> Self {
+               initialization_mode: MixerInitializationMode) -> Self {
         assert!(size <= 30);
         let mut result: Self =
             Self::new_neutral(size, initial_update_factor_index);
         assert_eq!(result.inputs().len(), size);
-        initialize_weights(&mut result, neutral);
+        initialize_weights(&mut result, initialization_mode,
+                           || MixerInitializationMode::flat_mixer_weight(size));
         result
     }
 

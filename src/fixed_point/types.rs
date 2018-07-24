@@ -304,7 +304,7 @@ impl StretchedProbQ {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MixerWeight(i32);
+pub struct MixerWeight(pub i32);
 
 impl FixedPoint for MixerWeight {
     type Raw = i32;

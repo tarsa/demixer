@@ -31,6 +31,15 @@ use demixer::mixing::apm::AdaptiveProbabilityMap;
 use demixer::random::MersenneTwister;
 
 #[test]
+fn sanity_checks() {
+    let stretch_lut = StretchLut::new(false);
+    let squash_lut = SquashLut::new(&stretch_lut, false);
+    for bits in 0..=LookUpTables::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS {
+        AdaptiveProbabilityMap::new(0, bits, &squash_lut);
+    }
+}
+
+#[test]
 fn initial_mapping_is_close_to_identity() {
     let stretched_fract_index_bits: u8 =
         LookUpTables::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS;

@@ -70,11 +70,14 @@ impl<'a> Predictor<'a> {
         self.contexts_chain.reset();
         self.tree_source.gather_history_states(&mut self.contexts_chain);
 
+        let contexts_count = self.contexts_chain.items().len();
+
         let mixed_probability = self.contexts_chain_predictor
             .predict(&self.contexts_chain, self.last_bytes.current_byte());
 
         let final_probability = self.prediction_finalizer.refine(
-            mixed_probability.0, mixed_probability.1, &self.last_bytes);
+            mixed_probability.0, mixed_probability.1,
+            contexts_count, &self.last_bytes);
         self.final_probability_opt = Some(final_probability);
         final_probability
     }
@@ -82,12 +85,15 @@ impl<'a> Predictor<'a> {
     pub fn update(&mut self, input_bit: Bit) {
         assert_ne!(self.final_probability_opt, None);
 
+        let contexts_count = self.contexts_chain.items().len();
+
         let cost_trackers = self.contexts_chain_predictor
             .update(input_bit, &self.contexts_chain);
 
         self.tree_source.process_input_bit(input_bit, &cost_trackers);
 
-        self.prediction_finalizer.update(input_bit, &self.last_bytes);
+        self.prediction_finalizer.update(input_bit, contexts_count,
+                                         &self.last_bytes);
 
         self.statistics.on_next_bit(input_bit, &self.contexts_chain,
                                     self.final_probability_opt.unwrap());

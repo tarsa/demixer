@@ -41,22 +41,25 @@ impl AdaptiveProbabilityMap {
         let offset = single_mapping_size / 2;
         let mappings_size = contexts_number * single_mapping_size as usize;
         let mut mappings = Vec::with_capacity(mappings_size);
-        for interval_stop in 0..single_mapping_size {
-            let stretched_unscaled = (interval_stop - offset) as i32;
-            let stretched_prob = StretchedProbD::new(
-                stretched_unscaled << (21 - stretched_fract_index_bits), 21);
-            let input_prob = squash_lut.squash(stretched_prob);
-            mappings.push(input_prob);
+        if contexts_number > 0 {
+            for interval_stop in 0..single_mapping_size {
+                let stretched_unscaled = (interval_stop - offset) as i32;
+                let stretched_prob = StretchedProbD::new(
+                    stretched_unscaled << (21 - stretched_fract_index_bits),
+                    21);
+                let input_prob = squash_lut.squash(stretched_prob);
+                mappings.push(input_prob);
+            }
+            for i in 0..=offset as usize {
+                assert_eq!(mappings[offset as usize + i].flip().raw(),
+                           mappings[offset as usize - i].raw());
+            }
         }
         for _ in 1..contexts_number {
             for input in 0..single_mapping_size {
                 let reused_value = mappings[input as usize];
                 mappings.push(reused_value);
             }
-        }
-        for i in 0..=offset as usize {
-            assert_eq!(mappings[offset as usize + i].flip().raw(),
-                       mappings[offset as usize - i].raw());
         }
         assert_eq!(mappings.len(), mappings_size);
         AdaptiveProbabilityMap {
@@ -133,8 +136,6 @@ impl AdaptiveProbabilityMap {
         let base_index = context * StretchedProbD::interval_stops_count(
             self.stretched_fract_index_bits) as usize;
         let left_context_index = self.saved_left_context_index as usize;
-        // TODO decide later if using weights or not
-        // TODO fixed weight seems to be better
         let weight_left =
             if fixed_weight {
                 FractOnlyU32::HALF

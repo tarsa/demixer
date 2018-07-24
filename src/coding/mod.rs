@@ -42,10 +42,10 @@ impl FinalProbability {
 impl FixedPoint for FinalProbability {
     type Raw = u32;
     fn raw(&self) -> u32 { self.0 }
-    fn new_unchecked(raw: u32) -> Self { FinalProbability(raw) }
-    fn within_bounds(&self) -> bool {
-        let raw = self.0;
-        (raw > 0) && (raw < 1 << Self::FRACTIONAL_BITS)
+    fn new_unchecked(raw: u32) -> Self {
+        assert!(raw <= (1u32 << Self::FRACTIONAL_BITS));
+        let raw = raw.min((1u32 << Self::FRACTIONAL_BITS) - 1).max(1);
+        FinalProbability(raw)
     }
 
     const FRACTIONAL_BITS: u8 = 23;

@@ -24,7 +24,9 @@ use history::ContextState;
 use history::state::{TheHistoryState, HistoryState};
 use history::tree::node::CostTrackers;
 use lut::LookUpTables;
-use mixing::mixer::{Mixer, FixedSizeMixer, Mixer1, Mixer2};
+use mixing::mixer::{
+    MixerInitializationMode, Mixer, FixedSizeMixer, Mixer1, Mixer2,
+};
 use util::indexer::{Indexer, Indexer3, Indexer4};
 use util::quantizers::OccurrenceCountQuantizer;
 
@@ -44,7 +46,7 @@ pub struct SingleContextPredictor {
 
 impl SingleContextPredictor {
     pub fn new(luts: &LookUpTables) -> Self {
-        let edge_fixed_st = StretchedProbD::new(4 << 21, 21);
+        let edge_fixed_st = StretchedProbD::new(6 << 21, 21);
         let edge_fixed_sq = luts.squash_lut().squash(edge_fixed_st);
         let mut edge_mixer_indexer = Indexer4::new(
             vec![OccurrenceCountQuantizer::max_output() + 1, 256, 4, 2]);
@@ -56,14 +58,16 @@ impl SingleContextPredictor {
         SingleContextPredictor {
             edge_fixed_st,
             edge_fixed_sq,
-            edge_mixers: vec![Mixer1::new(0, true);
-                              edge_mixer_indexer.get_array_size()],
+            edge_mixers: vec![
+                Mixer1::new(0, MixerInitializationMode::AllZero);
+                edge_mixer_indexer.get_array_size()],
             edge_mixer_indexer,
             edge_mixer_index_opt: None,
             edge_mixing_result_opt: None,
             node_non_stationary_estimators,
-            node_mixers: vec![Mixer2::new(3, false);
-                              node_mixer_indexer.get_array_size()],
+            node_mixers: vec![
+                Mixer2::new(3, MixerInitializationMode::EqualSummingToOne);
+                node_mixer_indexer.get_array_size()],
             node_mixer_indexer,
             node_mixer_index_opt: None,
             node_mixing_result_opt: None,

@@ -25,51 +25,53 @@ use demixer::lut::estimator::DeceleratingEstimatorRates;
 use demixer::lut::squash::SquashLut;
 use demixer::lut::stretch::StretchLut;
 use demixer::mixing::mixer::{
-    Mixer, FixedSizeMixer, Mixer1, Mixer2, Mixer3, Mixer4, Mixer5, MixerN,
+    MixerInitializationMode, Mixer, FixedSizeMixer,
+    Mixer1, Mixer2, Mixer3, Mixer4, Mixer5, MixerN,
 };
 use demixer::random::MersenneTwister;
 
 #[test]
 fn mixers_pass_self_checks() {
-    MixerN::new(30, 10, false);
-    Mixer1::new(10, false);
-    Mixer2::new(10, false);
-    Mixer3::new(10, false);
-    Mixer4::new(10, false);
-    Mixer5::new(10, false);
+    let mode = MixerInitializationMode::EqualSummingToOne;
+    MixerN::new(30, 10, mode);
+    Mixer1::new(10, mode);
+    Mixer2::new(10, mode);
+    Mixer3::new(10, mode);
+    Mixer4::new(10, mode);
+    Mixer5::new(10, mode);
 }
 
 #[test]
 fn mixing_converges_to_real_probability() {
-    mixer_converges_to_real_probability(|| MixerN::new(1, 10, false), &[
+    let mode = MixerInitializationMode::DominantFirst;
+    mixer_converges_to_real_probability(|| MixerN::new(1, 10, mode), &[
         (&[0.2], 0.5),
         (&[0.1], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer1::new(10, false), &[
+    mixer_converges_to_real_probability(|| Mixer1::new(10, mode), &[
         (&[0.2], 0.5),
         (&[0.1], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer2::new(10, false), &[
+    mixer_converges_to_real_probability(|| Mixer2::new(10, mode), &[
         (&[0.2, 0.9], 0.5),
         (&[0.1, 0.99], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer3::new(10, false), &[
+    mixer_converges_to_real_probability(|| Mixer3::new(10, mode), &[
         (&[0.2, 0.9, 0.7], 0.5),
         (&[0.1, 0.99, 0.9], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer4::new(10, false), &[
+    mixer_converges_to_real_probability(|| Mixer4::new(10, mode), &[
         (&[0.2, 0.9, 0.7, 0.1], 0.5),
         (&[0.1, 0.99, 0.9, 0.01], 0.01),
     ], 0.01);
-    mixer_converges_to_real_probability(|| Mixer5::new(10, false), &[
+    mixer_converges_to_real_probability(|| Mixer5::new(10, mode), &[
         (&[0.2, 0.9, 0.7, 0.1, 0.5], 0.5),
         (&[0.1, 0.99, 0.9, 0.01, 0.5], 0.01),
     ], 0.01);
 }
 
-fn mixer_converges_to_real_probability<Mxr: Mixer>(
-    make_mixer: fn() -> Mxr,
-    input_freqs_with_real_freqs: &[(&[f64], f64)],
+fn mixer_converges_to_real_probability<Mxr: Mixer, F: Fn() -> Mxr>(
+    make_mixer: F, input_freqs_with_real_freqs: &[(&[f64], f64)],
     max_overhead: f64,
 ) {
     let estimator_rates_lut = DeceleratingEstimatorRates::make_default();
@@ -140,29 +142,29 @@ fn mixer_converges_to_real_probability<Mxr: Mixer>(
 
 #[test]
 fn mixing_is_symmetric() {
-    mixer_is_symmetric(|| MixerN::new(1, 10, true), &[
+    let mode = MixerInitializationMode::AllZero;
+    mixer_is_symmetric(|| MixerN::new(1, 10, mode), &[
         (&[0.2], 0.5), (&[0.1], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer1::new(10, true), &[
+    mixer_is_symmetric(|| Mixer1::new(10, mode), &[
         (&[0.2], 0.5), (&[0.1], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer2::new(10, true), &[
+    mixer_is_symmetric(|| Mixer2::new(10, mode), &[
         (&[0.2, 0.9], 0.5), (&[0.1, 0.99], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer3::new(10, true), &[
+    mixer_is_symmetric(|| Mixer3::new(10, mode), &[
         (&[0.2, 0.9, 0.7], 0.5), (&[0.1, 0.99, 0.9], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer4::new(10, true), &[
+    mixer_is_symmetric(|| Mixer4::new(10, mode), &[
         (&[0.2, 0.9, 0.7, 0.1], 0.5), (&[0.1, 0.99, 0.9, 0.01], 0.01),
     ]);
-    mixer_is_symmetric(|| Mixer5::new(10, true), &[
+    mixer_is_symmetric(|| Mixer5::new(10, mode), &[
         (&[0.2, 0.9, 0.7, 0.1, 0.5], 0.5), (&[0.1, 0.99, 0.9, 0.01, 0.5], 0.01),
     ]);
 }
 
-fn mixer_is_symmetric<Mxr: Mixer>(
-    make_mixer: fn() -> Mxr,
-    input_freqs_with_real_freqs: &[(&[f64], f64)],
+fn mixer_is_symmetric<Mxr: Mixer, F: Fn() -> Mxr>(
+    make_mixer: F, input_freqs_with_real_freqs: &[(&[f64], f64)],
 ) {
     let estimator_rates_lut = DeceleratingEstimatorRates::make_default();
     let stretch_lut = StretchLut::new(false);
@@ -204,7 +206,7 @@ fn mixer_clamps_result_between_bounds() {
     let stretch_lut = StretchLut::new(false);
     let squash_lut = SquashLut::new(&stretch_lut, false);
     let d_estimator_rates_lut = DeceleratingEstimatorRates::make_default();
-    let mut mixer = MixerN::new(1, 0, true);
+    let mut mixer = MixerN::new(1, 0, MixerInitializationMode::AllZero);
     let input_sq = FractOnlyU32::from_f64(0.99);
     let input_st = stretch_lut.stretch(input_sq);
     let fixed_mix_result = FractOnlyU32::from_f64(0.6);

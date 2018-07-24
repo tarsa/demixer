@@ -44,6 +44,10 @@ fn estimate_compression(file_name: &String) -> std::io::Result<()> {
     let start_time = SystemTime::now();
     let luts = LookUpTables::new();
     let mut predictor = Predictor::new(&luts);
+    let initialization_secs = {
+        let duration = SystemTime::now().duration_since(start_time).unwrap();
+        duration.as_secs() as f64 + duration.subsec_nanos() as f64 * 1e-9
+    };
 
     let mut total_cost_in_bits = 0f64;
     let mut total_bytes = 0u64;
@@ -66,15 +70,17 @@ fn estimate_compression(file_name: &String) -> std::io::Result<()> {
         total_bytes += 1;
     }
 
-    let duration = SystemTime::now().duration_since(start_time).unwrap();
-    let duration_secs = duration.as_secs() as f64 +
-        duration.subsec_nanos() as f64 * 1e-9;
-    let speed_bps = total_bytes as f64 / duration_secs;
-    let speed_ns_byte = duration_secs / total_bytes as f64 * 1e9;
+    let total_duration_secs = {
+        let duration = SystemTime::now().duration_since(start_time).unwrap();
+        duration.as_secs() as f64 + duration.subsec_nanos() as f64 * 1e-9
+    };
+    let speed_bps = total_bytes as f64 / total_duration_secs;
+    let speed_ns_byte = total_duration_secs / total_bytes as f64 * 1e9;
     let average_bits_per_byte = total_cost_in_bits / total_bytes as f64;
     let compression_ratio = (total_bytes * 8) as f64 / total_cost_in_bits;
 
-    println!("duration               = {:15.3} seconds", duration_secs);
+    println!("initialization         = {:15.3} seconds", initialization_secs);
+    println!("total duration         = {:15.3} seconds", total_duration_secs);
     println!("speed                  = {:15.3} ns per byte", speed_ns_byte);
     println!("speed                  = {:15.3} bytes per second", speed_bps);
     println!("                       :  |  |  |  |   |");
@@ -84,7 +90,7 @@ fn estimate_compression(file_name: &String) -> std::io::Result<()> {
     println!("average cost           = {:17.5} bpb", average_bits_per_byte);
     println!("compression ratio      = {:15.3} : 1", compression_ratio);
 
-    predictor.print_state();
+//    predictor.print_state();
 
     Result::Ok(())
 }
