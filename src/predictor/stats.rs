@@ -21,6 +21,7 @@ use fixed_point::{FixedPoint, FixI32, FixI64};
 use fixed_point::types::Log2Q;
 use history::CollectedContextStates;
 use lut::LookUpTables;
+use util::last_bytes::{UnfinishedByte, LastBytesCache};
 
 pub struct PredictionStatistics<'a> {
     luts: &'a LookUpTables,
@@ -45,7 +46,9 @@ impl<'a> PredictionStatistics<'a> {
         }
     }
 
-    pub fn start_new_byte(&mut self) {
+    pub fn start_new_byte(&mut self, last_bytes: &LastBytesCache) {
+        // TODO implement costs per symbol value
+        assert_eq!(last_bytes.unfinished_byte(), UnfinishedByte::EMPTY);
         self.total_bytes += 1;
     }
 

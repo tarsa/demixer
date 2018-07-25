@@ -19,13 +19,20 @@ extern crate demixer;
 
 use demixer::bit::Bit;
 use demixer::random::MersenneTwister;
-use demixer::util::last_bytes::LastBytesCache;
+use demixer::util::last_bytes::{UnfinishedByte, LastBytesCache};
+
+#[test]
+fn sanity_checks() {
+    let mut cache = LastBytesCache::new();
+    cache.start_new_byte();
+    assert_eq!(cache.unfinished_byte(), UnfinishedByte::EMPTY);
+}
 
 #[test]
 #[should_panic(expected = "bit_index >= 0")]
 fn starting_new_byte_required_on_start() {
     let cache = LastBytesCache::new();
-    cache.current_byte();
+    cache.unfinished_byte();
 }
 
 #[test]
@@ -34,7 +41,7 @@ fn starting_new_byte_required_every_8_bits() {
     let mut cache = LastBytesCache::new();
     cache.start_new_byte();
     for _ in 0..8 { cache.on_next_bit(Bit::Zero); }
-    cache.current_byte();
+    cache.unfinished_byte();
 }
 
 #[test]
@@ -50,13 +57,13 @@ fn current_and_previous_bytes_are_properly_reported() {
         assert_eq!(cache.previous_byte_3(), previous_byte_3);
         assert_eq!(cache.previous_byte_2(), previous_byte_2);
         assert_eq!(cache.previous_byte_1(), previous_byte_1);
-        let mut current_byte = 1u8;
+        let mut unfinished_byte = 1u8;
         for bit_index in (0..=7).rev() {
-            assert_eq!(cache.current_byte(), current_byte);
+            assert_eq!(cache.unfinished_byte().raw(), unfinished_byte);
             let input_bit: Bit = ((input_byte >> bit_index) & 1 == 1).into();
             cache.on_next_bit(input_bit);
-            current_byte <<= 1;
-            current_byte += input_bit.to_u8();
+            unfinished_byte <<= 1;
+            unfinished_byte += input_bit.to_u8();
         }
         previous_byte_3 = previous_byte_2;
         previous_byte_2 = previous_byte_1;

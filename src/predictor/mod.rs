@@ -61,7 +61,7 @@ impl<'a> Predictor<'a> {
         assert_eq!(self.final_probability_opt, None);
         self.last_bytes.start_new_byte();
         self.tree_source.start_new_byte();
-        self.statistics.start_new_byte();
+        self.statistics.start_new_byte(&self.last_bytes);
     }
 
     pub fn predict(&mut self) -> FinalProbability {
@@ -73,7 +73,8 @@ impl<'a> Predictor<'a> {
         let contexts_count = self.contexts_chain.items().len();
 
         let mixed_probability = self.contexts_chain_predictor
-            .predict(&self.contexts_chain, self.last_bytes.current_byte());
+            .predict(&self.contexts_chain,
+                     self.last_bytes.unfinished_byte().raw());
 
         let final_probability = self.prediction_finalizer.refine(
             mixed_probability.0, mixed_probability.1,

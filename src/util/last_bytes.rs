@@ -19,6 +19,15 @@ use DO_CHECKS;
 use bit::Bit;
 use super::hash::Fnv1A;
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct UnfinishedByte(u8);
+
+impl UnfinishedByte {
+    pub const EMPTY: Self = UnfinishedByte(1);
+
+    pub fn raw(&self) -> u8 { self.0 }
+}
+
 #[derive(Clone)]
 pub struct LastBytesCache {
     bit_index: i32,
@@ -45,10 +54,11 @@ impl LastBytesCache {
         self.bit_index -= 1;
     }
 
-    pub fn current_byte(&self) -> u8 {
+    pub fn unfinished_byte(&self) -> UnfinishedByte {
         let bit_index = self.checked_bit_index();
-        (1u8 << (7 - bit_index)) +
-            ((self.bytes_cache & 0xff) >> (bit_index + 1)) as u8
+        let raw = (1u8 << (7 - bit_index)) +
+            ((self.bytes_cache & 0xff) >> (bit_index + 1)) as u8;
+        UnfinishedByte(raw)
     }
 
     pub fn previous_byte_1(&self) -> u8 {
@@ -77,7 +87,7 @@ impl LastBytesCache {
         let mut hasher = Fnv1A::new();
         hasher.mix_byte(self.previous_byte_2());
         hasher.mix_byte(self.previous_byte_1());
-        hasher.mix_byte(self.current_byte());
+        hasher.mix_byte(self.unfinished_byte().raw());
         hasher.into_u16()
     }
 
@@ -87,7 +97,7 @@ impl LastBytesCache {
         hasher.mix_byte(self.previous_byte_3());
         hasher.mix_byte(self.previous_byte_2());
         hasher.mix_byte(self.previous_byte_1());
-        hasher.mix_byte(self.current_byte());
+        hasher.mix_byte(self.unfinished_byte().raw());
         hasher.into_u16()
     }
 

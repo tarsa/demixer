@@ -93,8 +93,8 @@ impl<'a> PredictionFinalizer<'a> {
                 input_sq.to_fix_u32(),
             Mode::Light => {
                 let p0_o0_sq = self.phase0_order0.refine(
-                    last_bytes.current_byte() as usize, input_sq, input_st,
-                    self.luts.apm_lut(0));
+                    last_bytes.unfinished_byte().raw() as usize,
+                    input_sq, input_st, self.luts.apm_lut(0));
                 let p0_mix_sq_raw = fix_u64::scaled_down(
                     input_sq.raw() as u64 * 3 + p0_o0_sq.raw() as u64, 2);
                 let p0_mix_sq = FractOnlyU32::new(p0_mix_sq_raw as u32, 31);
@@ -118,8 +118,8 @@ impl<'a> PredictionFinalizer<'a> {
                 let mixer_index = quantize_contexts_count(contexts_count);
                 let mixer = &mut self.mixers[mixer_index];
                 let p0_o0_sq = self.phase0_order0.refine(
-                    last_bytes.current_byte() as usize, input_sq, input_st,
-                    self.luts.apm_lut(0));
+                    last_bytes.unfinished_byte().raw() as usize,
+                    input_sq, input_st, self.luts.apm_lut(0));
                 let p0_mix_sq_raw = fix_u64::scaled_down(
                     input_sq.raw() as u64 * 3 + p0_o0_sq.raw() as u64, 2);
                 let p0_mix_sq = FractOnlyU32::new(p0_mix_sq_raw as u32, 31);
@@ -157,7 +157,8 @@ impl<'a> PredictionFinalizer<'a> {
             Mode::None => (),
             Mode::Light => {
                 self.phase0_order0.update_predictions(
-                    last_bytes.current_byte() as usize, input_bit, 5, true);
+                    last_bytes.unfinished_byte().raw() as usize,
+                    input_bit, 5, true);
                 self.phase1_order1.update_predictions(
                     last_bytes.hash01_16() as usize, input_bit, 5, true);
                 self.phase1_order2.update_predictions(
@@ -169,7 +170,8 @@ impl<'a> PredictionFinalizer<'a> {
                 assert_ne!(self.mixing_result_opt, None);
                 let mixer_index = quantize_contexts_count(contexts_count);
                 self.phase0_order0.update_predictions(
-                    last_bytes.current_byte() as usize, input_bit, 5, false);
+                    last_bytes.unfinished_byte().raw() as usize,
+                    input_bit, 5, false);
                 if mixer_index >= 1 {
                     self.phase1_order1.update_predictions(
                         last_bytes.hash01_16() as usize, input_bit, 5, false);
