@@ -27,7 +27,7 @@ use util::last_bytes::LastBytesCache;
 #[allow(dead_code)]
 enum Mode { None, Light, Adaptive }
 
-const MODE: Mode = Mode::Adaptive;
+const MODE: Mode = Mode::Light;
 
 pub struct PredictionFinalizer<'a> {
     luts: &'a LookUpTables,
