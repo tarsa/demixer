@@ -29,6 +29,24 @@ fn sanity_checks() {
 }
 
 #[test]
+fn test_vector() {
+    let mut cache = LastBytesCache::new();
+    cache.start_new_byte();
+    let input_bytes = ['b' as u8, 'a' as u8, 'n' as u8, 'g' as u8];
+    for input_byte in input_bytes.iter() {
+        for bit_index in (0..=7).rev() {
+            let input_bit: Bit = ((input_byte & (1 << bit_index)) != 0).into();
+            cache.on_next_bit(input_bit);
+        }
+        cache.start_new_byte();
+    }
+    assert_eq!(cache.unfinished_byte(), UnfinishedByte::EMPTY);
+    assert_eq!(cache.previous_byte_1(), input_bytes[3]);
+    assert_eq!(cache.previous_byte_2(), input_bytes[2]);
+    assert_eq!(cache.previous_byte_3(), input_bytes[1]);
+}
+
+#[test]
 #[should_panic(expected = "bit_index >= 0")]
 fn starting_new_byte_required_on_start() {
     let cache = LastBytesCache::new();

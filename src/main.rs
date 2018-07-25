@@ -24,6 +24,7 @@ use demixer::bit::Bit;
 use demixer::fixed_point::FixedPoint;
 use demixer::lut::LookUpTables;
 use demixer::predictor::Predictor;
+use demixer::predictor::stats::PredictionStatisticsType;
 
 fn main() {
     print_banner();
@@ -55,7 +56,7 @@ fn estimate_compression(file_name: &String) -> std::io::Result<()> {
     for byte_read_result in std::io::BufReader::new(file).bytes() {
         let input_byte = byte_read_result?;
         predictor.start_new_byte();
-        for bit_index in 0..=7 {
+        for bit_index in (0..=7).rev() {
             let prediction = predictor.predict();
             let input_bit: Bit = ((input_byte & (1 << bit_index)) != 0).into();
             predictor.update(input_bit);
@@ -90,7 +91,11 @@ fn estimate_compression(file_name: &String) -> std::io::Result<()> {
     println!("average cost           = {:17.5} bpb", average_bits_per_byte);
     println!("compression ratio      = {:15.3} : 1", compression_ratio);
 
-//    predictor.print_state();
+    predictor.print_state(&[
+        PredictionStatisticsType::AverageContextLength,
+//        PredictionStatisticsType::CostsAndOccurrencesPerSymbolValue,
+        PredictionStatisticsType::TotalCostUsingLuts,
+    ]);
 
     Result::Ok(())
 }

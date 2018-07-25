@@ -28,7 +28,7 @@ use lut::LookUpTables;
 use util::last_bytes::LastBytesCache;
 use self::chain::ContextsChainPredictionMixer;
 use self::post_process::PredictionFinalizer;
-use self::stats::PredictionStatistics;
+use self::stats::{PredictionStatisticsType, PredictionStatistics};
 
 pub struct Predictor<'a> {
     last_bytes: LastBytesCache,
@@ -104,7 +104,7 @@ impl<'a> Predictor<'a> {
         self.last_bytes.on_next_bit(input_bit);
     }
 
-    pub fn print_state(&self) {
-        self.statistics.print_state();
+    pub fn print_state(&self, statistics_types: &[PredictionStatisticsType]) {
+        self.statistics.print_state(statistics_types);
     }
 }
