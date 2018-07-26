@@ -24,7 +24,8 @@ pub mod window;
 use bit::Bit;
 use estimators::decelerating::DeceleratingEstimator;
 use lut::LookUpTables;
-use self::state::{TheHistoryState, HistoryState, HistoryStateFactory};
+use self::state::bits_runs::BitsRunsTracker;
+use self::state::recent_bits::RecentBitsHistory;
 use self::tree::node::CostTrackers;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,7 +38,8 @@ pub enum ContextState {
     ForNode {
         last_occurrence_distance: usize,
         probability_estimator: DeceleratingEstimator,
-        bit_history: TheHistoryState,
+        recent_bits: RecentBitsHistory,
+        bits_runs: BitsRunsTracker,
         cost_trackers: CostTrackers,
     },
 }
@@ -71,13 +73,12 @@ impl ContextState {
         }
     }
 
-    pub fn bit_history(&self, luts: &LookUpTables) -> TheHistoryState {
+    pub fn recent_bits(&self) -> RecentBitsHistory {
         match self {
             &ContextState::ForEdge { occurrence_count, repeated_bit, .. } =>
-                luts.history_state_factory()
-                    .for_bit_run(repeated_bit, occurrence_count),
-            &ContextState::ForNode { bit_history, .. } =>
-                bit_history,
+                RecentBitsHistory::for_bit_run(repeated_bit, occurrence_count),
+            &ContextState::ForNode { recent_bits, .. } =>
+                recent_bits,
         }
     }
 
@@ -103,7 +104,7 @@ impl ContextState {
                   luts: &LookUpTables) -> ContextState {
         match self {
             &ContextState::ForNode {
-                probability_estimator, bit_history, ..
+                probability_estimator, recent_bits, bits_runs, ..
             } => {
                 assert!(cost_trackers_opt.is_some());
                 let mut probability_estimator =
@@ -113,7 +114,8 @@ impl ContextState {
                 ContextState::ForNode {
                     last_occurrence_distance: new_occurrence_distance,
                     probability_estimator,
-                    bit_history: bit_history.updated(bit_in_context),
+                    recent_bits: recent_bits.updated(bit_in_context),
+                    bits_runs: bits_runs.updated(bit_in_context),
                     cost_trackers: cost_trackers_opt.unwrap(),
                 }
             }
@@ -132,7 +134,9 @@ impl ContextState {
                 } else {
                     let d_estimator = luts.d_estimator_cache().for_new_node(
                         bit_in_context, occurrence_count);
-                    let bit_history = luts.history_state_factory().for_new_node(
+                    let recent_bits = RecentBitsHistory::for_new_node(
+                        bit_in_context, occurrence_count);
+                    let bits_runs = BitsRunsTracker::for_new_node(
                         bit_in_context, occurrence_count);
                     let cost_tracker =
                         luts.cost_trackers_lut().for_new_node(occurrence_count);
@@ -141,7 +145,8 @@ impl ContextState {
                     ContextState::ForNode {
                         last_occurrence_distance: new_occurrence_distance,
                         probability_estimator: d_estimator,
-                        bit_history,
+                        recent_bits,
+                        bits_runs,
                         cost_trackers,
                     }
                 }

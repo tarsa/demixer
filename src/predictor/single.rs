@@ -21,13 +21,12 @@ use estimators::decelerating::DeceleratingEstimator;
 use fixed_point::{FixedPoint, FixU32};
 use fixed_point::types::{FractOnlyU32, Log2D, StretchedProbD};
 use history::ContextState;
-use history::state::{TheHistoryState, HistoryState};
 use history::tree::node::CostTrackers;
 use lut::LookUpTables;
 use mixing::mixer::{
     MixerInitializationMode, Mixer, FixedSizeMixer, Mixer1, Mixer2,
 };
-use util::indexer::{Indexer, Indexer3, Indexer4};
+use util::indexer::{Indexer, Indexer2, Indexer3, Indexer4};
 use util::quantizers::OccurrenceCountQuantizer;
 
 pub struct SingleContextPredictor {
@@ -38,6 +37,8 @@ pub struct SingleContextPredictor {
     edge_mixer_index_opt: Option<usize>,
     edge_mixing_result_opt: Option<(FractOnlyU32, StretchedProbD)>,
     node_non_stationary_estimators: Vec<DeceleratingEstimator>,
+    node_non_stationary_indexer: Indexer2,
+    node_non_stationary_index_opt: Option<usize>,
     node_mixers: Vec<Mixer2>,
     node_mixer_indexer: Indexer3,
     node_mixer_index_opt: Option<usize>,
@@ -48,13 +49,12 @@ impl SingleContextPredictor {
     pub fn new(luts: &LookUpTables) -> Self {
         let edge_fixed_st = StretchedProbD::new(6 << 21, 21);
         let edge_fixed_sq = luts.squash_lut().squash(edge_fixed_st);
-        let mut edge_mixer_indexer = Indexer4::new(
-            vec![OccurrenceCountQuantizer::max_output() + 1, 256, 4, 2]);
-        let mut node_mixer_indexer = Indexer3::new(
-            vec![6, 4, OccurrenceCountQuantizer::max_output() + 1]);
-        let node_non_stationary_estimators =
-            vec![DeceleratingEstimator::new();
-                 2 * (TheHistoryState::MAX_LENGTH as usize + 1)];
+        let mut edge_mixer_indexer = Indexer4::new(vec![
+            OccurrenceCountQuantizer::max_output() + 1, 256, 4, 2]);
+        let mut node_non_stationary_indexer = Indexer2::new(vec![
+            OccurrenceCountQuantizer::max_output() + 1, 2]);
+        let mut node_mixer_indexer = Indexer3::new(vec![
+            6, 4, OccurrenceCountQuantizer::max_output() + 1]);
         SingleContextPredictor {
             edge_fixed_st,
             edge_fixed_sq,
@@ -64,7 +64,11 @@ impl SingleContextPredictor {
             edge_mixer_indexer,
             edge_mixer_index_opt: None,
             edge_mixing_result_opt: None,
-            node_non_stationary_estimators,
+            node_non_stationary_estimators: vec![
+                DeceleratingEstimator::new();
+                node_non_stationary_indexer.get_array_size()],
+            node_non_stationary_indexer,
+            node_non_stationary_index_opt: None,
             node_mixers: vec![
                 Mixer2::new(3, MixerInitializationMode::EqualSummingToOne);
                 node_mixer_indexer.get_array_size()],
@@ -78,6 +82,7 @@ impl SingleContextPredictor {
                    luts: &LookUpTables) -> FractOnlyU32 {
         assert_eq!(self.edge_mixer_index_opt, None);
         assert_eq!(self.edge_mixing_result_opt, None);
+        assert_eq!(self.node_non_stationary_index_opt, None);
         assert_eq!(self.node_mixer_index_opt, None);
         assert_eq!(self.node_mixing_result_opt, None);
         match ctx_state {
@@ -99,12 +104,16 @@ impl SingleContextPredictor {
                 mixing_result.0
             }
             &ContextState::ForNode {
-                last_occurrence_distance, probability_estimator, bit_history,
-                ref cost_trackers,
+                last_occurrence_distance, probability_estimator, bits_runs,
+                ref cost_trackers, ..
             } => {
-                let last_bit_run = bit_history.last_bit_run();
-                let non_stationary_index =
-                    (last_bit_run.0 * 2 + last_bit_run.1.to_u8()) as usize;
+                let non_stationary_index = self.node_non_stationary_indexer
+                    .with_sub_index(OccurrenceCountQuantizer::quantize(
+                        bits_runs.last_bit_run_length()))
+                    .with_sub_index(bits_runs.last_bit().to_u8() as usize)
+                    .get_array_index_and_reset();
+                self.node_non_stationary_index_opt =
+                    Some(non_stationary_index);
                 let non_stationary_prediction_sq =
                     self.node_non_stationary_estimators[non_stationary_index]
                         .prediction();
@@ -146,10 +155,10 @@ impl SingleContextPredictor {
                     input_bit, mixing_result.0, 500, luts.d_estimator_rates());
                 None
             }
-            &ContextState::ForNode { bit_history, ref cost_trackers, .. } => {
-                let last_bit_run = bit_history.last_bit_run();
+            &ContextState::ForNode { ref cost_trackers, .. } => {
                 let non_stationary_index =
-                    (last_bit_run.0 * 2 + last_bit_run.1.to_u8()) as usize;
+                    self.node_non_stationary_index_opt.unwrap();
+                self.node_non_stationary_index_opt = None;
                 self.node_non_stationary_estimators[non_stationary_index]
                     .update(input_bit, luts.d_estimator_rates());
                 let mixing_result = self.node_mixing_result_opt.unwrap();

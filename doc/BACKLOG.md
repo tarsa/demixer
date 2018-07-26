@@ -2,6 +2,18 @@
 
 - add missing unit tests
   - InputWindow is missing ones
+- implement low precision mode (chosen at compile time)
+  - rename current fix::mul functions to mul_precise
+  - always use mul_precise in LUT computations
+  - rename stretch to stretch_precise
+  - always use stretch_precise in squash LUT computations
+  - precise squash is already fast enough
+  - bench fast sigmoid and precise sigmoid
+- use inclusive ranges ( `for i in 0..=5 { do_something(); }` )
+- guard more functions with DO_CHECKS / NO_CHECKS
+- replace FractOnly types with FractOr1 ones? UnitValue? UnitInterval?
+  - UnitClose for unsigned
+  - UnitOpen for signed
 - improve test infrastructure
   - split test into multiple categories to save time on developing isolated
     features
@@ -15,15 +27,6 @@
     is satisfied
   - big input window can be especially beneficial when match model is added
   - match model has much smaller overhead than a full tree
-- bit histories should have 12-bits (as they have now) but be always based
-  on rich FSM with state attributes like: rescaling_happened, capped_run_length, 
-  no_branching, etc
-  - wide bit histories can be then narrowed to specialized narrow bit histories
-  - one narrow bit history is eg last (up to) 7 bits of history verbatim
-  - another narrow bit history can be still skewed towards long runs but having
-    smaller size (eg 8 bit) would be faster to adapt to (using stationary
-    counters)
-  - split history module into history::source and history::state modules
 - implement multi-threading which will be used for encoder
   - thread based, without work stealing
     - every thread has a set of its responsibilities
@@ -45,5 +48,7 @@
     - libc crate doesn't have clock_gettime for Microsoft Windows OS
   - flexible generic assignment of responsibilities to threads may be very hard
     to implement (sounds like implementing materializers from Akka Streams)
+    - simplify by relaxing types and using partial functions
+      - just throw exceptions when non-matching message arrives
   - hardcoded schemes of data flow graphs for different thread configurations
     sounds plausible

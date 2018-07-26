@@ -93,6 +93,7 @@ fn estimate_compression(file_name: &String) -> std::io::Result<()> {
 
     predictor.print_state(&[
         PredictionStatisticsType::AverageContextLength,
+//        PredictionStatisticsType::CostsAndOccurrencesPerContextType,
 //        PredictionStatisticsType::CostsAndOccurrencesPerSymbolValue,
         PredictionStatisticsType::TotalCostUsingLuts,
     ]);

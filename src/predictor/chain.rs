@@ -140,8 +140,8 @@ impl<'a> ContextsChainPredictionMixer<'a> {
                 0 + (previous.occurrence_count() ==
                     current.occurrence_count()) as usize,
             (true, true) =>
-                2 + (previous.bit_history(self.luts) ==
-                    current.bit_history(self.luts)) as usize,
+                2 + (previous.recent_bits() ==
+                    current.recent_bits()) as usize,
             (true, false) => 4,
             _ => panic!("binary context cannot be longer than unary context"),
         }

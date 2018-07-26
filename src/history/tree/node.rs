@@ -21,7 +21,8 @@ use bit::Bit;
 use estimators::cost::CostTracker;
 use estimators::decelerating::DeceleratingEstimator;
 use history::ContextState;
-use history::state::{TheHistoryState, HistoryState};
+use history::state::bits_runs::BitsRunsTracker;
+use history::state::recent_bits::RecentBitsHistory;
 use history::window::WindowIndex;
 use lut::estimator::DeceleratingEstimatorRates;
 use super::direction::Direction;
@@ -54,7 +55,8 @@ pub struct Node {
     pub text_start: u32,
     probability_estimator: DeceleratingEstimator,
     cost_trackers: CostTrackers,
-    history_state: TheHistoryState,
+    bits_runs: BitsRunsTracker,
+    recent_bits: RecentBitsHistory,
     depth: u16,
     left_count: u16,
     right_count: u16,
@@ -66,7 +68,8 @@ impl Node {
         text_start: 0,
         probability_estimator: DeceleratingEstimator::INVALID,
         cost_trackers: CostTrackers::DEFAULT,
-        history_state: TheHistoryState::INVALID,
+        bits_runs: BitsRunsTracker::NEW,
+        recent_bits: RecentBitsHistory::INVALID,
         depth: 0,
         left_count: 0,
         right_count: 0,
@@ -74,19 +77,21 @@ impl Node {
 
     pub fn new(text_start: WindowIndex,
                probability_estimator: DeceleratingEstimator, depth: usize,
-               cost_trackers: CostTrackers, left_count: u16, right_count: u16,
-               history_state: TheHistoryState, children: NodeChildren) -> Node {
+               cost_trackers: CostTrackers, bits_runs: BitsRunsTracker,
+               left_count: u16, right_count: u16,
+               recent_bits: RecentBitsHistory, children: NodeChildren) -> Node {
         assert!((text_start.raw() as u64) < 1u64 << 31);
         assert!((depth as u64) < 1u64 << 16);
         assert!((left_count as u64) < 1u64 << 16);
         assert!((right_count as u64) < 1u64 << 16);
-        assert!(history_state.is_valid());
+        assert!(recent_bits.is_valid());
         Node {
             children,
             text_start: text_start.raw() as u32,
             probability_estimator,
             cost_trackers,
-            history_state,
+            bits_runs,
+            recent_bits,
             depth: depth as u16,
             left_count,
             right_count,
@@ -122,25 +127,30 @@ impl Node {
         self.right_count
     }
 
-    pub fn history_state(&self) -> TheHistoryState {
-        self.history_state
+    pub fn bits_runs(&self) -> BitsRunsTracker {
+        self.bits_runs
+    }
+
+    pub fn recent_bits(&self) -> RecentBitsHistory {
+        self.recent_bits
     }
 
     pub fn child(&self, direction: Direction) -> NodeChild {
         self.children[direction]
     }
 
-    pub fn increment_edge_counters(&mut self, direction: Direction,
-                                   new_cost_trackers: CostTrackers,
-                                   lut: &DeceleratingEstimatorRates) {
+    pub fn update_on_next_bit(&mut self, bit: Bit,
+                              new_cost_trackers: CostTrackers,
+                              lut: &DeceleratingEstimatorRates) {
+        let direction: Direction = bit.into();
         match direction {
             Direction::Left => self.left_count =
                 ContextState::MAX_OCCURRENCE_COUNT.min(self.left_count + 1),
             Direction::Right => self.right_count =
                 ContextState::MAX_OCCURRENCE_COUNT.min(self.right_count + 1),
         }
-        let bit: Bit = direction.into();
-        self.history_state = self.history_state.updated(bit);
+        self.bits_runs = self.bits_runs.updated(bit);
+        self.recent_bits = self.recent_bits.updated(bit);
         self.probability_estimator.update(bit, &lut);
         self.cost_trackers = new_cost_trackers;
     }
@@ -150,7 +160,7 @@ impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}'{}'{:b}'l({})r({})",
                self.text_start(), self.depth(),
-               self.history_state().last_bits(),
+               self.recent_bits().last_7_bits(),
                self.left_count(), self.right_count())
     }
 }

@@ -43,8 +43,8 @@ impl Context {
                    new_cost_trackers: CostTrackers,
                    rates_lut: &DeceleratingEstimatorRates) {
         assert!(!self.in_leaf);
-        let direction: Direction =
-            tree.window.get_bit(tree.window.cursor(), bit_index).into();
+        let bit = tree.window.get_bit(tree.window.cursor(), bit_index);
+        let direction: Direction = bit.into();
         self.direction_from_parent = Some(direction);
         let node_index = self.node_index;
         self.incoming_edge_visits_count = {
@@ -55,8 +55,8 @@ impl Context {
                 node.right_count()
             }
         } as i32;
-        tree.nodes_mut()[node_index].increment_edge_counters(
-            direction, new_cost_trackers, rates_lut);
+        tree.nodes_mut()[node_index].update_on_next_bit(
+            bit, new_cost_trackers, rates_lut);
         let child = tree.nodes()[node_index].child(direction);
         if child.is_window_index() {
             self.in_leaf = true;

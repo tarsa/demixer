@@ -26,7 +26,8 @@ use bit::Bit;
 use estimators::decelerating::DeceleratingEstimator;
 use lut::LookUpTables;
 use super::{CollectedContextStates, ContextState, HistorySource};
-use super::state::HistoryStateFactory;
+use super::state::bits_runs::BitsRunsTracker;
+use super::state::recent_bits::RecentBitsHistory;
 use super::window::{InputWindow, WindowIndex};
 use self::context::{ActiveContexts, Context};
 use self::direction::Direction;
@@ -430,7 +431,8 @@ impl<'a> Tree<'a> {
                         collected_states.items.push(ContextState::ForNode {
                             last_occurrence_distance,
                             probability_estimator: node.probability_estimator(),
-                            bit_history: node.history_state(),
+                            recent_bits: node.recent_bits(),
+                            bits_runs: node.bits_runs(),
                             cost_trackers: node.cost_trackers(),
                         });
                     } else {
@@ -592,15 +594,18 @@ impl<'a> Tree<'a> {
         let cost_tracker = luts.cost_trackers_lut()
             .for_new_node(incoming_edge_visits_count);
         let cost_trackers = CostTrackers::new(cost_tracker, cost_tracker);
-        let bit_history = luts.history_state_factory()
-            .for_new_node(bit, incoming_edge_visits_count);
+        let bits_runs =
+            BitsRunsTracker::for_new_node(bit, incoming_edge_visits_count);
+        let recent_bits =
+            RecentBitsHistory::for_new_node(bit, incoming_edge_visits_count);
         Node::new(text_start,
                   probability_estimator,
                   context_order * 8 + 7 - bit_index,
                   cost_trackers,
+                  bits_runs,
                   direction.fold(|| 1, || incoming_edge_visits_count),
                   direction.fold(|| incoming_edge_visits_count, || 1),
-                  bit_history,
+                  recent_bits,
                   NodeChildren::INVALID)
     }
 
@@ -629,8 +634,10 @@ impl<'a> Tree<'a> {
                 ) as u16;
             let probability_estimator = luts.d_estimator_cache()
                 .for_new_node(bit, repeated_edge_count);
-            let bit_history = luts.history_state_factory()
-                .for_new_node(bit, repeated_edge_count);
+            let recent_bits =
+                RecentBitsHistory::for_new_node(bit, repeated_edge_count);
+            let bits_runs =
+                BitsRunsTracker::for_new_node(bit, repeated_edge_count);
             let cost_tracker = luts.cost_trackers_lut()
                 .for_new_node(repeated_edge_count);
             let cost_trackers = CostTrackers::new(cost_tracker, cost_tracker);
@@ -639,9 +646,10 @@ impl<'a> Tree<'a> {
                 probability_estimator,
                 current_context_order * 8 + 7 - bit_index,
                 cost_trackers,
+                bits_runs,
                 direction.fold(|| 1, || repeated_edge_count),
                 direction.fold(|| repeated_edge_count, || 1),
-                bit_history,
+                recent_bits,
                 children,
             );
             if current_context_order == 0 {

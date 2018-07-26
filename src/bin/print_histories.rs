@@ -23,7 +23,6 @@ use demixer::MAX_ORDER;
 use demixer::history::{CollectedContextStates, HistorySource};
 use demixer::history::naive::NaiveHistorySource;
 use demixer::history::fat_map::FatMapHistorySource;
-use demixer::history::state::HistoryState;
 use demixer::history::tree::TreeHistorySource;
 use demixer::history::tree::node::CostTrackers;
 use demixer::history::window::get_bit;
@@ -63,12 +62,10 @@ fn print_bit_histories<'a, Source: HistorySource<'a>>(input: &[u8],
             collected_states.reset();
             history_source.gather_history_states(&mut collected_states);
             if collected_states.items().len() > 0 {
-                print!("{}: ", bit_index);
-                print!("{:x}", collected_states.items()[0]
-                    .bit_history(luts).last_bits());
+                print!("{}: {:x}", bit_index, collected_states.items()[0]
+                    .recent_bits().last_7_bits());
                 for item in collected_states.items()[1..].iter() {
-                    print!(", ");
-                    print!("{:x}", item.bit_history(luts).last_bits());
+                    print!(", {:x}", item.recent_bits().last_7_bits());
                 }
                 println!();
             }

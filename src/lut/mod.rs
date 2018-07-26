@@ -22,7 +22,6 @@ pub mod log2;
 pub mod squash;
 pub mod stretch;
 
-use history::state::{TheHistoryStateFactory, HistoryStateFactory};
 use self::apm::ApmWeightingLut;
 use self::cost::CostTrackersLut;
 use self::estimator::{DeceleratingEstimatorRates, DeceleratingEstimatorCache};
@@ -39,7 +38,6 @@ pub struct LookUpTables {
     squash_lut: SquashLut,
     apm_luts: [ApmWeightingLut;
         LookUpTables::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS as usize + 1],
-    history_state_factory: TheHistoryStateFactory,
 }
 
 impl LookUpTables {
@@ -67,7 +65,6 @@ impl LookUpTables {
             stretch_lut,
             squash_lut,
             apm_luts,
-            history_state_factory: TheHistoryStateFactory::new(),
         }
     }
 
@@ -99,9 +96,5 @@ impl LookUpTables {
         assert!(stretched_fract_index_bits <=
             Self::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS);
         &self.apm_luts[stretched_fract_index_bits as usize]
-    }
-
-    pub fn history_state_factory(&self) -> &TheHistoryStateFactory {
-        &self.history_state_factory
     }
 }

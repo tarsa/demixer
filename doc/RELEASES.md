@@ -1,5 +1,12 @@
 # Releases
 
+### Version 0.10.0
+
+- Implemented bits runs trackers in tree nodes
+  - three last bits runs lengths are kept, each capped to 1000
+- FSM-based bit history states are no longer planned
+  - FSM stands for Finite State Machine
+
 ### Version 0.9.0
 
 - Implemented actual context mixing
