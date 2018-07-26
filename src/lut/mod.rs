@@ -24,7 +24,10 @@ pub mod stretch;
 
 use self::apm::ApmWeightingLut;
 use self::cost::CostTrackersLut;
-use self::estimator::{DeceleratingEstimatorRates, DeceleratingEstimatorCache};
+use self::estimator::{
+    DeceleratingEstimatorRates, DeceleratingEstimatorCache,
+    DeceleratingEstimatorPredictions,
+};
 use self::log2::Log2Lut;
 use self::squash::SquashLut;
 use self::stretch::StretchLut;
@@ -33,6 +36,7 @@ pub struct LookUpTables {
     log2_lut: Log2Lut,
     d_estimator_rates: DeceleratingEstimatorRates,
     d_estimator_cache: DeceleratingEstimatorCache,
+    direct_predictions: DeceleratingEstimatorPredictions,
     cost_trackers_lut: CostTrackersLut,
     stretch_lut: StretchLut,
     squash_lut: SquashLut,
@@ -52,6 +56,8 @@ impl LookUpTables {
             CostTrackersLut::new(&log2_lut, &d_estimator_rates);
         let stretch_lut = StretchLut::new(false);
         let squash_lut = SquashLut::new(&stretch_lut, false);
+        let direct_predictions = DeceleratingEstimatorPredictions::new(
+            &stretch_lut, &d_estimator_rates);
         let apm_luts = [
             ApmWeightingLut::new(0, &squash_lut),
             ApmWeightingLut::new(1, &squash_lut),
@@ -61,6 +67,7 @@ impl LookUpTables {
             log2_lut,
             d_estimator_rates,
             d_estimator_cache,
+            direct_predictions,
             cost_trackers_lut,
             stretch_lut,
             squash_lut,
@@ -78,6 +85,10 @@ impl LookUpTables {
 
     pub fn d_estimator_cache(&self) -> &DeceleratingEstimatorCache {
         &self.d_estimator_cache
+    }
+
+    pub fn direct_predictions(&self) -> &DeceleratingEstimatorPredictions {
+        &self.direct_predictions
     }
 
     pub fn cost_trackers_lut(&self) -> &CostTrackersLut {

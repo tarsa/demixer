@@ -20,7 +20,8 @@ use std::ops::Index;
 use bit::Bit;
 use estimators::decelerating::DeceleratingEstimator;
 use fixed_point::FixedPoint;
-use fixed_point::types::FractOnlyU32;
+use fixed_point::types::{FractOnlyU32, StretchedProbD};
+use lut::stretch::StretchLut;
 
 pub struct DeceleratingEstimatorRates(
     [FractOnlyU32; 1usize << DeceleratingEstimator::COUNT_BITS]);
@@ -30,7 +31,7 @@ impl DeceleratingEstimatorRates {
         Self::make(1, 2)
     }
 
-    pub fn make(factor: u32, addend: u32) -> DeceleratingEstimatorRates {
+    pub fn make(factor: u32, addend: u32) -> Self {
         let mut array = [FractOnlyU32::new_unchecked(0);
             1 << DeceleratingEstimator::COUNT_BITS];
         for index in 0..array.len() {
@@ -54,7 +55,7 @@ pub struct DeceleratingEstimatorCache(
     [DeceleratingEstimator; 1usize << DeceleratingEstimator::COUNT_BITS]);
 
 impl DeceleratingEstimatorCache {
-    pub fn new(lut: &DeceleratingEstimatorRates) -> DeceleratingEstimatorCache {
+    pub fn new(lut: &DeceleratingEstimatorRates) -> Self {
         let mut estimator = DeceleratingEstimator::new();
         let mut array = [DeceleratingEstimator::INVALID;
             1 << DeceleratingEstimator::COUNT_BITS];
@@ -77,5 +78,31 @@ impl DeceleratingEstimatorCache {
             let prediction = flipped.prediction().flip();
             DeceleratingEstimator::make(prediction, flipped.usage_count())
         }
+    }
+}
+
+pub struct DeceleratingEstimatorPredictions(
+    [(FractOnlyU32, StretchedProbD);
+        1usize << DeceleratingEstimator::COUNT_BITS]);
+
+impl DeceleratingEstimatorPredictions {
+    pub fn new(stretch_lut: &StretchLut, rates_lut: &DeceleratingEstimatorRates)
+               -> Self {
+        let mut estimator = DeceleratingEstimator::make(FractOnlyU32::HALF, 1);
+        let mut array = [(FractOnlyU32::HALF, StretchedProbD::ZERO);
+            1 << DeceleratingEstimator::COUNT_BITS];
+        for index in 0..array.len() {
+            let prediction_sq = estimator.prediction();
+            let prediction_st = stretch_lut.stretch(prediction_sq);
+            array[index] = (prediction_sq, prediction_st);
+            estimator.update(Bit::Zero, rates_lut);
+        }
+        DeceleratingEstimatorPredictions(array)
+    }
+
+    pub fn for_0_bit_run(&self, bit_0_run_length: u16)
+                         -> (FractOnlyU32, StretchedProbD) {
+        assert!(bit_0_run_length <= DeceleratingEstimator::MAX_COUNT);
+        self.0[bit_0_run_length as usize]
     }
 }
