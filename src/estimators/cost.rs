@@ -15,8 +15,11 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-use fixed_point::{FixedPoint, fix_u16};
-use fixed_point::types::Log2D;
+use bit::Bit;
+use coding::FinalProbability;
+use fixed_point::{FixedPoint, fix_u16, FixU32};
+use fixed_point::types::{FractOnlyU32, Log2D};
+use lut::LookUpTables;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CostTracker(u16);
@@ -33,6 +36,12 @@ impl CostTracker {
     }
 
     pub fn raw(&self) -> u16 { self.0 }
+
+    pub fn updated_on_bit(&self, probability_sq: FractOnlyU32, input_bit: Bit,
+                          luts: &LookUpTables) -> Self {
+        self.updated(probability_sq.to_fix_u32::<FinalProbability>()
+            .estimate_cost(input_bit, luts.log2_lut()))
+    }
 
     pub fn updated(&self, new_cost: Log2D) -> Self {
         let decayed = self.0 - fix_u16::scaled_down(self.0, Self::DECAY_SCALE);

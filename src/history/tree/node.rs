@@ -20,10 +20,12 @@ use core::fmt;
 use bit::Bit;
 use estimators::cost::CostTracker;
 use estimators::decelerating::DeceleratingEstimator;
+use fixed_point::types::FractOnlyU32;
 use history::ContextState;
 use history::state::bits_runs::BitsRunsTracker;
 use history::state::recent_bits::RecentBitsHistory;
 use history::window::WindowIndex;
+use lut::LookUpTables;
 use lut::estimator::DeceleratingEstimatorRates;
 use super::direction::Direction;
 use super::node_child::{NodeChild, NodeChildren};
@@ -47,6 +49,16 @@ impl CostTrackers {
     pub fn stationary(&self) -> CostTracker { self.stationary }
 
     pub fn non_stationary(&self) -> CostTracker { self.non_stationary }
+
+    pub fn updated(&self, probability_stationary: FractOnlyU32,
+                   probability_non_stationary: FractOnlyU32,
+                   input_bit: Bit, luts: &LookUpTables) -> Self {
+        Self::new(
+            self.stationary.updated_on_bit(
+                probability_stationary, input_bit, luts),
+            self.non_stationary.updated_on_bit(
+                probability_non_stationary, input_bit, luts))
+    }
 }
 
 #[derive(Clone)]
