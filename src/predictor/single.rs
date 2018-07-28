@@ -23,131 +23,133 @@ use history::state::bits_runs::BitsRunsTracker;
 use history::tree::node::CostTrackers;
 use lut::LookUpTables;
 use mixing::mixer::{
-    MixerInitializationMode, Mixer, FixedSizeMixer, Mixer2, Mixer3,
+    MixerInitializationMode, Mixer, FixedSizeMixer, Mixer3, Mixer4,
 };
-use util::indexer::{Indexer, Indexer2, Indexer3, Indexer4};
+use util::indexer::{Indexer, Indexer2};
 use util::quantizers::OccurrenceCountQuantizer;
 use super::kits::{EstimatorsWithIndexer, MixersWithIndexer};
 
 pub struct SingleContextPredictor {
     edge_fixed_prediction: (FractOnlyU32, StretchedProbD),
-    edge_mixer_kit: MixersWithIndexer<Mixer2, Indexer4>,
-    node_non_stationary_1: EstimatorsWithIndexer<Indexer2>,
-    node_non_stationary_3: EstimatorsWithIndexer<Indexer4>,
-    node_mixer_kit: MixersWithIndexer<Mixer3, Indexer3>,
+    edge_occur_and_byte: EstimatorsWithIndexer<Indexer2>,
+    node_bits_run: EstimatorsWithIndexer<Indexer2>,
 }
 
 impl SingleContextPredictor {
+    pub fn new_edge_mixer() -> Mixer4 {
+        Mixer4::new(10, MixerInitializationMode::DominantFirst)
+    }
+    pub fn edge_mixer_extra_dimensions() -> Vec<usize> {
+        vec![4, 2]
+    }
+
+    pub fn new_node_mixer() -> Mixer3 {
+        Mixer3::new(10, MixerInitializationMode::DominantFirst)
+    }
+    pub fn node_mixer_extra_dimensions() -> Vec<usize> {
+        vec![6, 4, OccurrenceCountQuantizer::max_output() + 1]
+    }
+
     pub fn new(luts: &LookUpTables) -> Self {
         let max_quantized_bit_run_length = OccurrenceCountQuantizer::quantize(
             BitsRunsTracker::MAX_RUN_LENGTH);
-        let edge_fixed_st = StretchedProbD::new(6 << 21, 21);
+        let edge_fixed_st = StretchedProbD::new(2 << 21, 21);
         let edge_fixed_sq = luts.squash_lut().squash(edge_fixed_st);
         SingleContextPredictor {
             edge_fixed_prediction: (edge_fixed_sq, edge_fixed_st),
-            edge_mixer_kit: MixersWithIndexer::new(
-                || Mixer2::new(0, MixerInitializationMode::DominantFirst),
-                Indexer4::new(vec![
-                    OccurrenceCountQuantizer::max_output() + 1, 256, 4, 2])),
-            node_non_stationary_1: EstimatorsWithIndexer::new(
+            edge_occur_and_byte: EstimatorsWithIndexer::new(
+                Indexer2::new(vec![max_quantized_bit_run_length + 1, 256])),
+            node_bits_run: EstimatorsWithIndexer::new(
                 Indexer2::new(vec![
                     max_quantized_bit_run_length + 1, 2])),
-            node_non_stationary_3: EstimatorsWithIndexer::new(
-                Indexer4::new(vec![
-                    max_quantized_bit_run_length + 1,
-                    max_quantized_bit_run_length + 1,
-                    max_quantized_bit_run_length + 1,
-                    2])),
-            node_mixer_kit: MixersWithIndexer::new(
-                || Mixer3::new(3, MixerInitializationMode::EqualSummingToOne),
-                Indexer3::new(vec![
-                    6, 4, OccurrenceCountQuantizer::max_output() + 1])),
         }
     }
 
-    pub fn predict(&mut self, ctx_state: &ContextState, context_byte: u8,
-                   luts: &LookUpTables) -> FractOnlyU32 {
+    pub fn predict<Idx: Indexer, Mxr: Mixer>(
+        &mut self, mixer_kit: &mut MixersWithIndexer<Mxr, Idx>,
+        ctx_state: &ContextState, context_byte: u8,
+        lower_order_probability: (FractOnlyU32, StretchedProbD),
+        luts: &LookUpTables) -> (FractOnlyU32, StretchedProbD) {
+        let lower = lower_order_probability;
         match ctx_state {
             &ContextState::ForEdge {
                 repeated_bit, occurrence_count, last_occurrence_distance
             } => {
+                let quantized_count = OccurrenceCountQuantizer::quantize(
+                    occurrence_count);
+                let quantized_distance = quantize_distance(
+                    last_occurrence_distance);
+                let occur_and_byte =
+                    self.edge_occur_and_byte.predict(luts, |indexer| indexer
+                        .with_sub_index(quantized_count)
+                        .with_sub_index(context_byte as usize));
                 let direct = luts.direct_predictions()
                     .for_0_bit_run(occurrence_count);
                 let edge_fixed = self.edge_fixed_prediction;
-                let mixing_result = self.edge_mixer_kit.predict(
+                let mixing_result = mixer_kit.predict(
                     |indexer| indexer
-                        .with_sub_index(OccurrenceCountQuantizer::quantize(
-                            occurrence_count))
-                        .with_sub_index(context_byte as usize)
-                        .with_sub_index(quantize_distance(
-                            last_occurrence_distance))
+                        .with_sub_index(quantized_distance)
                         .with_sub_index(repeated_bit.to_u8() as usize),
                     |mixer| {
-                        mixer.set_input(0, direct.0, direct.1);
-                        mixer.set_input(1, edge_fixed.0, edge_fixed.1);
+                        mixer.set_input(0, lower.0, lower.1);
+                        mixer.set_input(1, direct.0, direct.1);
+                        mixer.set_input(2, edge_fixed.0, edge_fixed.1);
+                        mixer.set_input(3, occur_and_byte.0, occur_and_byte.1);
                     }, luts);
-                mixing_result.0
+                mixing_result
             }
             &ContextState::ForNode {
                 last_occurrence_distance, probability_estimator, bits_runs,
                 ref cost_trackers, ..
             } => {
-                let non_stationary_1_prediction = self.node_non_stationary_1
-                    .predict(luts, |indexer| indexer
-                        .with_sub_index(OccurrenceCountQuantizer::quantize(
-                            bits_runs.last_bit_run_length()))
-                        .with_sub_index(bits_runs.last_bit().to_u8() as usize));
-                let non_stationary_3_prediction = self.node_non_stationary_3
-                    .predict(luts, |indexer| indexer
-                        .with_sub_index(OccurrenceCountQuantizer::quantize(
-                            bits_runs.last_bit_previous_run_length()))
-                        .with_sub_index(OccurrenceCountQuantizer::quantize(
-                            bits_runs.opposite_bit_run_length()))
-                        .with_sub_index(OccurrenceCountQuantizer::quantize(
-                            bits_runs.last_bit_run_length()))
-                        .with_sub_index(bits_runs.last_bit().to_u8() as usize));
                 let stationary_prediction_sq =
                     probability_estimator.prediction();
                 let stationary_prediction_st =
                     luts.stretch_lut().stretch(stationary_prediction_sq);
-                let quantized_usage_count = OccurrenceCountQuantizer::quantize(
-                    probability_estimator.usage_count());
-                let mixing_result = self.node_mixer_kit.predict(
+                let bits_runs_1_prediction = self.node_bits_run
+                    .predict(luts, |indexer| indexer
+                        .with_sub_index(OccurrenceCountQuantizer::quantize(
+                            bits_runs.last_bit_run_length()))
+                        .with_sub_index(bits_runs.last_bit().to_u8() as usize));
+                let quantized_run_length = OccurrenceCountQuantizer::quantize(
+                    bits_runs.opposite_bit_run_length());
+                let mixing_result = mixer_kit.predict(
                     |indexer| indexer
                         .with_sub_index(quantize_cost_trackers(cost_trackers))
                         .with_sub_index(quantize_distance(
                             last_occurrence_distance))
-                        .with_sub_index(quantized_usage_count),
+                        .with_sub_index(quantized_run_length),
                     |mixer| {
-                        mixer.set_input(0, stationary_prediction_sq,
+                        mixer.set_input(0, lower.0, lower.1);
+                        mixer.set_input(1, stationary_prediction_sq,
                                         stationary_prediction_st);
-                        mixer.set_input(1, non_stationary_1_prediction.0,
-                                        non_stationary_1_prediction.1);
-                        mixer.set_input(2, non_stationary_3_prediction.0,
-                                        non_stationary_3_prediction.1);
+                        mixer.set_input(2, bits_runs_1_prediction.0,
+                                        bits_runs_1_prediction.1);
                     }, luts);
-                mixing_result.0
+                mixing_result
             }
         }
     }
 
-    pub fn update(&mut self, ctx_state: &ContextState, input_bit: Bit,
-                  luts: &LookUpTables) -> Option<CostTrackers> {
+    pub fn update<Idx: Indexer, Mxr: Mixer>(
+        &mut self, mixer_kit: &mut MixersWithIndexer<Mxr, Idx>,
+        ctx_state: &ContextState, input_bit: Bit,
+        luts: &LookUpTables) -> Option<CostTrackers> {
         match ctx_state {
             &ContextState::ForEdge { .. } => {
-                self.edge_mixer_kit.update(input_bit, 500, luts);
+                self.edge_occur_and_byte.update(input_bit, luts);
+                mixer_kit.update(input_bit, 300, luts);
                 None
             }
             &ContextState::ForNode { ref cost_trackers, .. } => {
-                self.node_non_stationary_1.update(input_bit, luts);
-                self.node_non_stationary_3.update(input_bit, luts);
+                self.node_bits_run.update(input_bit, luts);
                 let new_cost_trackers = {
-                    let mixer = self.node_mixer_kit.current_mixer();
+                    let mixer = mixer_kit.current_mixer();
                     cost_trackers.updated(
-                        mixer.prediction_sq(0), mixer.prediction_sq(1),
+                        mixer.prediction_sq(1), mixer.prediction_sq(2),
                         input_bit, luts)
                 };
-                self.node_mixer_kit.update(input_bit, 100, luts);
+                mixer_kit.update(input_bit, 100, luts);
                 Some(new_cost_trackers)
             }
         }

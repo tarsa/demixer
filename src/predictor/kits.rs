@@ -80,6 +80,13 @@ impl<Mxr: Mixer, Idx: Indexer> MixersWithIndexer<Mxr, Idx> {
         }
     }
 
+    pub fn pre_predict<IdxSetup>(&mut self, setup_indexer: IdxSetup)
+        where IdxSetup: Fn(&mut Idx) -> &mut Idx {
+        assert_eq!(self.mixing_result_opt, None);
+        assert_eq!(self.index_opt, None);
+        setup_indexer(&mut self.indexer);
+    }
+
     pub fn predict<IdxSetup, AddInputs>(
         &mut self, setup_indexer: IdxSetup, add_inputs: AddInputs,
         luts: &LookUpTables) -> (FractOnlyU32, StretchedProbD)

@@ -55,6 +55,17 @@ impl ContextState {
         }
     }
 
+    pub fn probability_estimator(
+        &self, luts: &LookUpTables) -> DeceleratingEstimator {
+        match self {
+            &ContextState::ForEdge { occurrence_count, .. } =>
+                DeceleratingEstimator::make(luts.direct_predictions().
+                    for_0_bit_run(occurrence_count).0, occurrence_count),
+            &ContextState::ForNode { probability_estimator, .. } =>
+                probability_estimator,
+        }
+    }
+
     pub fn last_occurrence_distance(&self) -> usize {
         match self {
             &ContextState::ForEdge { last_occurrence_distance, .. } =>
