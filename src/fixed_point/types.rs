@@ -261,19 +261,29 @@ impl StretchedProbD {
     pub const MIN: Self =
         StretchedProbD(-(Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS));
 
-    pub fn intervals_count(stretched_fract_index_bits: u8) -> i32 {
-        2 * Self::ABSOLUTE_LIMIT << stretched_fract_index_bits
+    pub fn intervals_count(scale_down_bits: u8) -> usize {
+        2 * (Self::max_unshifted_interval_index(scale_down_bits) + 1)
     }
 
-    pub fn interval_stops_count(stretched_fract_index_bits: u8) -> i32 {
-        1 + Self::intervals_count(stretched_fract_index_bits)
+    pub fn interval_stops_count(scale_down_bits: u8) -> usize {
+        1 + Self::intervals_count(scale_down_bits)
     }
 
-    pub fn to_interval_index(&self, fract_index_bits: u8) -> i32 {
-        let max_raw = (Self::ABSOLUTE_LIMIT << Self::FRACTIONAL_BITS) - 1;
-        let raw = self.raw().min(max_raw);
-        let offset = Self::ABSOLUTE_LIMIT << fract_index_bits;
-        offset + (raw >> Self::FRACTIONAL_BITS - fract_index_bits)
+    pub fn to_interval_index(&self, scale_down_bits: u8) -> usize {
+        let half_range_size =
+            Self::max_unshifted_interval_index(scale_down_bits) as i32 + 1;
+        let absolute = self.raw().abs() >>
+            (Self::FRACTIONAL_BITS + scale_down_bits);
+        let absolute = absolute.min(half_range_size - 1);
+        let mask = if self.raw() < 0 { -1 } else { 0 };
+        let result = half_range_size + (absolute ^ mask);
+        if DO_CHECKS { assert!(result >= 0); }
+        result as usize
+    }
+
+    fn max_unshifted_interval_index(scale_down_bits: u8) -> usize {
+        if DO_CHECKS { assert!(Self::ABSOLUTE_LIMIT > 0); }
+        ((Self::ABSOLUTE_LIMIT - 1) >> scale_down_bits) as usize
     }
 }
 

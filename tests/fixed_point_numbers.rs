@@ -17,9 +17,10 @@
  */
 extern crate demixer;
 
-use demixer::fixed_point::{FixedPoint, FixU32, FixU64};
-use demixer::fixed_point::types::Log2D;
+use demixer::fixed_point::{FixedPoint, FixI32, FixU32, FixU64};
+use demixer::fixed_point::types::{Log2D, StretchedProbD};
 use demixer::lut::log2::Log2Lut;
+use demixer::util::interpolate_f64;
 
 struct FixU32F17(u32);
 
@@ -88,4 +89,24 @@ fn test_u64_log2(input: f64, lut: &Log2Lut) {
     };
     let actual_log2 = input.log2(lut);
     assert!((actual_log2.raw() - expected_log2.raw()).abs() <= 1);
+}
+
+#[test]
+fn stretched_prob_d_interval_index_is_symmetric() {
+    for scale_down_bits in 0..5 {
+        let last_interval =
+            StretchedProbD::intervals_count(scale_down_bits) - 1;
+        let check = |input64| {
+            let input = StretchedProbD::from_f64(input64);
+            assert_eq!(
+                input.to_interval_index(scale_down_bits),
+                last_interval - input.neg().to_interval_index(scale_down_bits));
+        };
+        for input64 in interpolate_f64(0.0, 12.0, 1234).skip(1) {
+            check(input64);
+        }
+        for input64 in interpolate_f64(0.0, 8.0, 1024).skip(1) {
+            check(input64);
+        }
+    }
 }

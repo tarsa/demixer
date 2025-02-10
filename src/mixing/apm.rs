@@ -15,16 +15,19 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+use DO_CHECKS;
 use bit::Bit;
-use fixed_point::{FixedPoint, FixI32, FixU32, fix_u32};
-use fixed_point::types::{FractOnlyU32, StretchedProbD};
+use fixed_point::{FixedPoint, FixU32, fix_u32, FixI64};
+use fixed_point::types::{FractOnlyU32, StretchedProbD, StretchedProbQ};
 use lut::apm::ApmWeightingLut;
 use lut::squash::SquashLut;
 
 
+pub const SHARED_ENDPOINTS: bool = true;
+
 pub struct AdaptiveProbabilityMap {
     mappings: Vec<FractOnlyU32>,
-    stretched_fract_index_bits: u8,
+    stretched_scale_down_bits: u8,
     contexts_number: usize,
     saved_left_context_index: i32,
     saved_left_weight: FractOnlyU32,
@@ -34,37 +37,74 @@ impl AdaptiveProbabilityMap {
     /// PAQ8 default:
     ///
     /// stretched_fract_index_bits = 1
-    pub fn new(contexts_number: usize, stretched_fract_index_bits: u8,
+    pub fn new(contexts_number: usize, stretched_scale_down_bits: u8,
                squash_lut: &SquashLut) -> Self {
         let single_mapping_size =
-            StretchedProbD::interval_stops_count(stretched_fract_index_bits);
-        let offset = single_mapping_size / 2;
-        let mappings_size = contexts_number * single_mapping_size as usize;
+            if SHARED_ENDPOINTS {
+                StretchedProbD::interval_stops_count(stretched_scale_down_bits)
+            } else {
+                StretchedProbD::intervals_count(stretched_scale_down_bits) * 2
+            };
+        let mappings_size = contexts_number * single_mapping_size;
         let mut mappings = Vec::with_capacity(mappings_size);
         if contexts_number > 0 {
-            for interval_stop in 0..single_mapping_size {
-                let stretched_unscaled = (interval_stop - offset) as i32;
-                let stretched_prob = StretchedProbD::new(
-                    stretched_unscaled << (21 - stretched_fract_index_bits),
-                    21);
-                let input_prob = squash_lut.squash(stretched_prob);
-                mappings.push(input_prob);
-            }
-            for i in 0..=offset as usize {
-                assert_eq!(mappings[offset as usize + i].flip().raw(),
-                           mappings[offset as usize - i].raw());
-            }
+            if SHARED_ENDPOINTS {
+                let offset = single_mapping_size / 2;
+                for interval_stop in 0..single_mapping_size {
+                    let stretched_unscaled = (interval_stop - offset) as i64;
+                    let stretched_prob: StretchedProbD = StretchedProbQ::new(
+                        stretched_unscaled << (40 + stretched_scale_down_bits),
+                        40).clamped().to_fix_i32();
+                    let input_prob = squash_lut.squash(stretched_prob);
+                    mappings.push(input_prob);
+                }
+                for i in 0..=offset as usize {
+                    assert_eq!(mappings[offset + i].flip().raw(),
+                               mappings[offset - i].raw());
+                }
+            } else {
+                let intervals_count = StretchedProbD::intervals_count(
+                    stretched_scale_down_bits);
+                assert_eq!(intervals_count & 1, 0);
+                for distance_from_0 in (0..(intervals_count / 2) as i64).rev() {
+                    let left_prob_st: StretchedProbD = StretchedProbQ::new(
+                        (distance_from_0 + 1) <<
+                            (40 + stretched_scale_down_bits), 40)
+                        .neg().clamped().to_fix_i32();
+                    let right_prob_st: StretchedProbD = StretchedProbQ::new(
+                        distance_from_0 << (40 + stretched_scale_down_bits), 40)
+                        .neg().clamped().to_fix_i32();
+                    mappings.push(squash_lut.squash(left_prob_st));
+                    mappings.push(squash_lut.squash(right_prob_st));
+                }
+                for distance_from_0 in 0..(intervals_count / 2) as i64 {
+                    let left_prob_st: StretchedProbD = StretchedProbQ::new(
+                        distance_from_0 << (40 + stretched_scale_down_bits), 40)
+                        .clamped().to_fix_i32();
+                    let right_prob_st: StretchedProbD = StretchedProbQ::new(
+                        (distance_from_0 + 1) <<
+                            (40 + stretched_scale_down_bits), 40)
+                        .clamped().to_fix_i32();
+                    mappings.push(squash_lut.squash(left_prob_st));
+                    mappings.push(squash_lut.squash(right_prob_st));
+                }
+                for distance in 0..intervals_count {
+                    assert_eq!(mappings[intervals_count + distance]
+                                   .flip().raw(),
+                               mappings[intervals_count - distance - 1].raw());
+                }
+            };
         }
         for _ in 1..contexts_number {
             for input in 0..single_mapping_size {
-                let reused_value = mappings[input as usize];
+                let reused_value = mappings[input];
                 mappings.push(reused_value);
             }
         }
         assert_eq!(mappings.len(), mappings_size);
         AdaptiveProbabilityMap {
             mappings,
-            stretched_fract_index_bits,
+            stretched_scale_down_bits,
             contexts_number,
             saved_left_context_index: -1,
             saved_left_weight: FractOnlyU32::ZERO,
@@ -74,40 +114,33 @@ impl AdaptiveProbabilityMap {
     pub fn refine(&mut self, context: usize,
                   input_sq: FractOnlyU32, input_st: StretchedProbD,
                   apm_lut: &ApmWeightingLut) -> FractOnlyU32 {
-        assert_eq!(self.stretched_fract_index_bits,
-                   apm_lut.stretched_fract_index_bits());
+        assert_eq!(self.stretched_scale_down_bits,
+                   apm_lut.stretched_scale_down_bits());
         assert_eq!(self.saved_left_context_index, -1);
-        let fract_index_bits = self.stretched_fract_index_bits;
-        let stops_count =
-            StretchedProbD::interval_stops_count(fract_index_bits);
+        let scale_down_bits = self.stretched_scale_down_bits;
+        let stops_count = StretchedProbD::interval_stops_count(scale_down_bits);
         let last_interval_stop = stops_count - 1;
         let input_sq = input_sq
-            .min(apm_lut.squashed_interval_stops()[last_interval_stop as usize])
+            .min(apm_lut.squashed_interval_stops()[last_interval_stop])
             .max(apm_lut.squashed_interval_stops()[0]);
-        let input_st = match input_st {
-            StretchedProbD::MIN =>
-                StretchedProbD::MIN.add(&StretchedProbD::ulp()),
-            StretchedProbD::MAX =>
-                StretchedProbD::MAX.sub(&StretchedProbD::ulp()),
-            other => other,
-        };
-        let index_scale = StretchedProbD::FRACTIONAL_BITS - fract_index_bits;
-        let offset = stops_count / 2;
-        let index_left = (input_st.raw() >> index_scale) + offset;
-        assert!(index_left >= 0 && index_left + 1 < stops_count);
-        let index_left = index_left as usize;
+        let index_left = input_st.to_interval_index(scale_down_bits);
+        if DO_CHECKS {
+            assert!(index_left + 1 < stops_count,
+                    "{} {}", index_left, stops_count);
+        }
         let index_left =
             if input_sq < apm_lut.squashed_interval_stops()[index_left] {
                 assert_ne!(index_left, 0);
                 index_left - 1
-            } else { index_left };
-        let index_right = index_left + 1;
+            } else if index_left < stops_count && input_sq > apm_lut
+                .squashed_interval_stops()[index_left + 1] {
+                index_left + 1
+            } else {
+                index_left
+            };
         let interval_index = index_left;
         assert!(input_sq >= apm_lut.squashed_interval_stops()[index_left]);
-        assert!(input_sq <= apm_lut.squashed_interval_stops()[index_right]);
-        let mapping_start = context * stops_count as usize;
-        let left_bound = self.mappings[mapping_start + index_left];
-        let right_bound = self.mappings[mapping_start + index_right];
+        assert!(input_sq <= apm_lut.squashed_interval_stops()[index_left + 1]);
         let weight_right =
             input_sq.sub(&apm_lut.squashed_interval_stops()[index_left]);
         let weight_right = FractOnlyU32::new(
@@ -120,6 +153,17 @@ impl AdaptiveProbabilityMap {
             FractOnlyU32::ZERO => FractOnlyU32::ONE_UNSAFE,
             other => FractOnlyU32::ONE_UNSAFE.sub(&other),
         };
+        let single_mapping_size =
+            if SHARED_ENDPOINTS {
+                StretchedProbD::interval_stops_count(scale_down_bits)
+            } else {
+                StretchedProbD::intervals_count(scale_down_bits) * 2
+            };
+        let mapping_start = context * single_mapping_size;
+        let index_left =
+            if SHARED_ENDPOINTS { index_left } else { index_left * 2 };
+        let left_bound = self.mappings[mapping_start + index_left];
+        let right_bound = self.mappings[mapping_start + index_left + 1];
         self.saved_left_context_index = index_left as i32;
         self.saved_left_weight = weight_left;
         let result_right: FractOnlyU32 = fix_u32::mul(
@@ -130,11 +174,18 @@ impl AdaptiveProbabilityMap {
     }
 
     pub fn update_predictions(&mut self, context: usize, input_bit: Bit,
-                              log_rate: u8, fixed_weight: bool) {
+                              left_log_rate: u8, right_log_rate: u8,
+                              fixed_weight: bool) {
         assert!(self.saved_left_context_index >= 0);
         assert!(context < self.contexts_number);
-        let base_index = context * StretchedProbD::interval_stops_count(
-            self.stretched_fract_index_bits) as usize;
+        let scale_down_bits = self.stretched_scale_down_bits;
+        let single_mapping_size =
+            if SHARED_ENDPOINTS {
+                StretchedProbD::interval_stops_count(scale_down_bits)
+            } else {
+                StretchedProbD::intervals_count(scale_down_bits) * 2
+            };
+        let base_index = context * single_mapping_size;
         let left_context_index = self.saved_left_context_index as usize;
         let weight_left =
             if fixed_weight {
@@ -143,15 +194,15 @@ impl AdaptiveProbabilityMap {
                 self.saved_left_weight
             };
         let weight_right = FractOnlyU32::ONE_UNSAFE.sub(&weight_left);
-        self.update_single_entry(input_bit, weight_left,
-                                 base_index + left_context_index, log_rate);
-        self.update_single_entry(input_bit, weight_right,
-                                 base_index + left_context_index + 1, log_rate);
+        self.update_single_entry(input_bit, base_index + left_context_index,
+                                 weight_left, left_log_rate);
+        self.update_single_entry(input_bit, base_index + left_context_index + 1,
+                                 weight_right, right_log_rate);
         self.saved_left_context_index = -1;
     }
 
-    fn update_single_entry(&mut self, input_bit: Bit, weight: FractOnlyU32,
-                           entry_index: usize, log_rate: u8) {
+    fn update_single_entry(&mut self, input_bit: Bit, entry_index: usize,
+                           weight: FractOnlyU32, log_rate: u8) {
         assert!(log_rate > 0 && log_rate < 30);
         let entry = self.mappings[entry_index];
         match input_bit {

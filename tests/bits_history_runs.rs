@@ -82,7 +82,7 @@ fn bits_runs_are_properly_shifted_back_on_bit_change() {
     let mut prng = MersenneTwister::default();
     let mut bits_runs = BitsRunsTracker::new();
 
-    let mut last_bit_previous_run_length = 0;
+    let mut last_bit_previous_run_length;
     let mut opposite_bit_run_length = 0;
     let mut last_bit_run_length = 0;
 

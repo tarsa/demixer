@@ -1,5 +1,25 @@
 # Backlog
 
+- priority tasks
+  - clean text model?
+    - alphabet permutation is probably needed, but as a second step?
+    - enabled when unfinished byte matches prefix
+    - enabled on select bits, otherwise disabled and bits erased to 0
+  - XML parsers and statistics
+    - then XML modelling
+  - wiki bbcode -> XML transformer
+    - before that make an enwikX-only appendices that will turn enwiks into
+      proper XMLs with proper bbcode if it's cut in half in a particular enwikX
+  - pre-train estimators for indirect modelling
+    - expect biggest boost on small files,
+      but on bigger ones there should be too
+  - move tests from inline tests modules to tests/ directory
+  - hashed context simplified history source (like in PAQ series)
+- add 48-bit WideDeceleratingEstimator
+  - 32-bits for prediction
+  - 16-bits for usage count
+  - much more precise for very skewed probabilities
+- address Clippy complaints
 - add missing unit tests
   - InputWindow is missing ones
 - implement low precision mode (chosen at compile time)

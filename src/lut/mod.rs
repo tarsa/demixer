@@ -41,11 +41,11 @@ pub struct LookUpTables {
     stretch_lut: StretchLut,
     squash_lut: SquashLut,
     apm_luts: [ApmWeightingLut;
-        LookUpTables::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS as usize + 1],
+        LookUpTables::APM_LUTS_MAX_STRETCHED_SCALE_DOWN_BITS as usize + 1],
 }
 
 impl LookUpTables {
-    pub const APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS: u8 = 2;
+    pub const APM_LUTS_MAX_STRETCHED_SCALE_DOWN_BITS: u8 = 2;
 
     pub fn new() -> LookUpTables {
         let log2_lut = Log2Lut::new();
@@ -103,9 +103,9 @@ impl LookUpTables {
         &self.squash_lut
     }
 
-    pub fn apm_lut(&self, stretched_fract_index_bits: u8) -> &ApmWeightingLut {
-        assert!(stretched_fract_index_bits <=
-            Self::APM_LUTS_MAX_STRETCHED_FRACT_INDEX_BITS);
-        &self.apm_luts[stretched_fract_index_bits as usize]
+    pub fn apm_lut(&self, stretched_scale_down_bits: u8) -> &ApmWeightingLut {
+        assert!(stretched_scale_down_bits <=
+            Self::APM_LUTS_MAX_STRETCHED_SCALE_DOWN_BITS);
+        &self.apm_luts[stretched_scale_down_bits as usize]
     }
 }

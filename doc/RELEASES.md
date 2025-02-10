@@ -1,5 +1,10 @@
 # Releases
 
+### Version 0.11.0
+
+- clean text model?
+  - with character permutations
+
 ### Version 0.10.0
 
 - Implemented bits runs trackers in tree nodes

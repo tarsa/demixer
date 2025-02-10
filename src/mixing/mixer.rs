@@ -39,11 +39,6 @@ impl MixerInitializationMode {
 
 const UPDATE_FACTOR_INDEX_LIMIT: u16 = DeceleratingEstimator::MAX_COUNT;
 
-fn fixed_update_factor() -> FractOnlyI32 {
-//    FractOnlyI32::new(500_000_000, 31)
-    FractOnlyI32::HALF
-}
-
 pub trait Mixer where Self: MixerData {
     fn prediction_sq(&self, index: usize) -> FractOnlyU32 {
         self.assert_input_is_set(index);
@@ -94,10 +89,8 @@ pub trait Mixer where Self: MixerData {
                         max_update_factor_index: u16,
                         d_estimator_rates_lut: &DeceleratingEstimatorRates) {
         assert_eq!(self.common().inputs_mask, (1u32 << self.size()) - 1);
-        let dynamic_update_factor = FractOnlyI32::new(
+        let update_factor = FractOnlyI32::new(
             d_estimator_rates_lut[update_factor_index(self)].raw() as i32, 31);
-        let update_factor: FractOnlyI32 = fix_i32::mul(
-            &fixed_update_factor(), &dynamic_update_factor);
         match input_bit {
             Bit::Zero => {
                 let error = FractOnlyU32::ONE_UNSAFE.sub(&mix_result_sq);

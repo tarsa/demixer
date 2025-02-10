@@ -37,14 +37,14 @@ pub struct SingleContextPredictor {
 
 impl SingleContextPredictor {
     pub fn new_edge_mixer() -> Mixer4 {
-        Mixer4::new(10, MixerInitializationMode::DominantFirst)
+        Mixer4::new(15, MixerInitializationMode::DominantFirst)
     }
     pub fn edge_mixer_extra_dimensions() -> Vec<usize> {
         vec![4, 2]
     }
 
     pub fn new_node_mixer() -> Mixer3 {
-        Mixer3::new(10, MixerInitializationMode::DominantFirst)
+        Mixer3::new(15, MixerInitializationMode::DominantFirst)
     }
     pub fn node_mixer_extra_dimensions() -> Vec<usize> {
         vec![6, 4, OccurrenceCountQuantizer::max_output() + 1]
@@ -138,7 +138,7 @@ impl SingleContextPredictor {
         match ctx_state {
             &ContextState::ForEdge { .. } => {
                 self.edge_occur_and_byte.update(input_bit, luts);
-                mixer_kit.update(input_bit, 300, luts);
+                mixer_kit.update(input_bit, 700, luts);
                 None
             }
             &ContextState::ForNode { ref cost_trackers, .. } => {
@@ -149,7 +149,7 @@ impl SingleContextPredictor {
                         mixer.prediction_sq(1), mixer.prediction_sq(2),
                         input_bit, luts)
                 };
-                mixer_kit.update(input_bit, 100, luts);
+                mixer_kit.update(input_bit, 250, luts);
                 Some(new_cost_trackers)
             }
         }

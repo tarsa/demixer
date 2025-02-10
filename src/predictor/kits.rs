@@ -20,6 +20,7 @@ use estimators::decelerating::DeceleratingEstimator;
 use fixed_point::types::{FractOnlyU32, StretchedProbD};
 use lut::LookUpTables;
 use mixing::mixer::Mixer;
+use util::{drain_full_option, fill_empty_option};
 use util::indexer::Indexer;
 
 const PREDICT_UPDATE_PAIRING_MSG: &str = "predict must be paired with update";
@@ -44,10 +45,9 @@ impl<Idx: Indexer> EstimatorsWithIndexer<Idx> {
         &mut self, luts: &LookUpTables, setup_indexer: IdxSetup)
         -> (FractOnlyU32, StretchedProbD)
         where IdxSetup: Fn(&mut Idx) -> &mut Idx {
-        assert_eq!(self.index_opt, None);
         let index =
             setup_indexer(&mut self.indexer).get_array_index_and_reset();
-        self.index_opt = Some(index);
+        fill_empty_option(&mut self.index_opt, index);
         let prediction_sq = self.estimators[index].prediction();
         let prediction_st = luts.stretch_lut().stretch(prediction_sq);
         (prediction_sq, prediction_st)
@@ -92,15 +92,13 @@ impl<Mxr: Mixer, Idx: Indexer> MixersWithIndexer<Mxr, Idx> {
         luts: &LookUpTables) -> (FractOnlyU32, StretchedProbD)
         where IdxSetup: Fn(&mut Idx) -> &mut Idx,
               AddInputs: Fn(&mut Mxr) -> () {
-        assert_eq!(self.mixing_result_opt, None);
-        assert_eq!(self.index_opt, None);
         let index = setup_indexer(&mut self.indexer)
             .get_array_index_and_reset();
-        self.index_opt = Some(index);
+        fill_empty_option(&mut self.index_opt, index);
         let mixer = &mut self.mixers[index];
         add_inputs(mixer);
         let mixing_result = mixer.mix_all(luts.squash_lut());
-        self.mixing_result_opt = Some(mixing_result);
+        fill_empty_option(&mut self.mixing_result_opt, mixing_result);
         mixing_result
     }
 
@@ -108,8 +106,7 @@ impl<Mxr: Mixer, Idx: Indexer> MixersWithIndexer<Mxr, Idx> {
                   luts: &LookUpTables) -> (FractOnlyU32, StretchedProbD) {
         let index = self.index_opt.expect(PREDICT_UPDATE_PAIRING_MSG);
         self.index_opt = None;
-        let mixing_result = self.mixing_result_opt.unwrap();
-        self.mixing_result_opt = None;
+        let mixing_result = drain_full_option(&mut self.mixing_result_opt);
         let mixer = &mut self.mixers[index];
         mixer.update_and_reset(input_bit, mixing_result.0,
                                max_update_factor_index,

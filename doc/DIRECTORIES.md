@@ -1,0 +1,30 @@
+### Directory structure
+- counter
+  - DeceleratingCounter
+- engine
+  - cli
+  - format / file_format
+  - options
+- entropy
+  - decoder
+  - encoder
+- history
+  - source
+    - Naive, FatMap, Tree
+  - state
+    - RecentBits, FSM
+- math_lut
+  - Stretch, Squash, Log2
+- mixing
+  - Mixer2
+  - MixerChain
+- predictor
+  - MainModel, CleanTextModel, Permutations
+- fixed_point
+  - traits: FixedPointU64, FixedPointI64, etc
+  - types (implementing traits above)
+    - LinearProb, StretchedProb, etc
+- threading
+  - ???
+- util
+  - LastBytes for use in ProbabilityFinalizer

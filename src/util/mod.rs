@@ -18,4 +18,35 @@
 pub mod hash;
 pub mod indexer;
 pub mod last_bytes;
+pub mod permutation;
 pub mod quantizers;
+
+pub fn drain_full_option<T: Copy>(option: &mut Option<T>) -> T {
+    assert!(option.is_some());
+    let value = option.unwrap();
+    *option = None;
+    value
+}
+
+pub fn fill_empty_option<T>(option: &mut Option<T>, value: T) {
+    assert!(option.is_none());
+    *option = Some(value);
+}
+
+pub fn interpolate_f64(start: f64, stop: f64, intervals: u32)
+                       -> impl Iterator<Item=f64> {
+    (0..=intervals).map(move |step|
+        stop * (step as f64 / intervals as f64) +
+            start * ((intervals - step) as f64 / intervals as f64))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn interpolate_f64_is_correct() {
+        assert_eq!(interpolate_f64(1.0, 2.0, 4).collect::<Vec<_>>(),
+                   vec![1.0, 1.25, 1.5, 1.75, 2.0]);
+    }
+}

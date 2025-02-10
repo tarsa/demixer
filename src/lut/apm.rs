@@ -16,34 +16,36 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use PRINT_DEBUG;
-use fixed_point::{FixedPoint, FixU32, fix_u32};
-use fixed_point::types::{FractOnlyU32, StretchedProbD};
+use fixed_point::{FixedPoint, FixU32, fix_u32, FixI64};
+use fixed_point::types::{FractOnlyU32, StretchedProbD, StretchedProbQ};
 use lut::squash::SquashLut;
 
 pub struct ApmWeightingLut {
     squashed_interval_stops: Vec<FractOnlyU32>,
     shifts_by_interval: Vec<u8>,
     extra_factor_by_interval: Vec<FractOnlyU32>,
-    stretched_fract_index_bits: u8,
+    stretched_scale_down_bits: u8,
 }
 
 impl ApmWeightingLut {
-    pub fn new(stretched_fract_index_bits: u8, squash_lut: &SquashLut) -> Self {
+    pub fn new(stretched_scale_down_bits: u8, squash_lut: &SquashLut) -> Self {
         if PRINT_DEBUG {
-            println!("apm weighting lut, fract bits: {}",
-                     stretched_fract_index_bits);
+            println!("apm weighting lut, scale down bits: {}",
+                     stretched_scale_down_bits);
         }
-        let interval_stops_count = StretchedProbD::interval_stops_count(
-            stretched_fract_index_bits) as usize;
+        let interval_stops_count =
+            StretchedProbD::interval_stops_count(stretched_scale_down_bits);
         let mut squashed_stops = Vec::with_capacity(interval_stops_count);
         let mut shifts_by_interval = Vec::with_capacity(interval_stops_count);
         let mut extra_factor_by_interval =
             Vec::with_capacity(interval_stops_count);
         let offset = interval_stops_count as i32 / 2;
         for interval_stop_index in 0..interval_stops_count {
-            let stretched_unscaled = interval_stop_index as i32 - offset;
-            let stretched_prob = StretchedProbD::new(
-                stretched_unscaled << (21 - stretched_fract_index_bits), 21);
+            let stretched_unscaled =
+                (interval_stop_index as i32 - offset) as i64;
+            let stretched_prob: StretchedProbD = StretchedProbQ::new(
+                stretched_unscaled << (40 + stretched_scale_down_bits), 40)
+                .clamped().to_fix_i32();
             let squashed_prob = squash_lut.squash(stretched_prob);
             squashed_stops.push(squashed_prob);
             if PRINT_DEBUG {
@@ -93,7 +95,7 @@ impl ApmWeightingLut {
             squashed_interval_stops: squashed_stops,
             shifts_by_interval,
             extra_factor_by_interval,
-            stretched_fract_index_bits,
+            stretched_scale_down_bits,
         }
     }
 
@@ -130,7 +132,7 @@ impl ApmWeightingLut {
         self.extra_factor_by_interval.as_slice()
     }
 
-    pub fn stretched_fract_index_bits(&self) -> u8 {
-        self.stretched_fract_index_bits
+    pub fn stretched_scale_down_bits(&self) -> u8 {
+        self.stretched_scale_down_bits
     }
 }

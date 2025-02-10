@@ -26,6 +26,7 @@ use coding::FinalProbability;
 use history::{CollectedContextStates, HistorySource};
 use history::tree::TreeHistorySource;
 use lut::LookUpTables;
+use util::{drain_full_option, fill_empty_option};
 use util::last_bytes::LastBytesCache;
 use self::chain::ContextsChainPredictionMixer;
 use self::post_process::PredictionFinalizer;
@@ -66,8 +67,6 @@ impl<'a> Predictor<'a> {
     }
 
     pub fn predict(&mut self) -> FinalProbability {
-        assert_eq!(self.final_probability_opt, None);
-
         self.contexts_chain.reset();
         self.tree_source.gather_history_states(&mut self.contexts_chain);
 
@@ -80,13 +79,11 @@ impl<'a> Predictor<'a> {
         let final_probability = self.prediction_finalizer.refine(
             mixed_probability.0, mixed_probability.1,
             contexts_count, &self.last_bytes);
-        self.final_probability_opt = Some(final_probability);
+        fill_empty_option(&mut self.final_probability_opt, final_probability);
         final_probability
     }
 
     pub fn update(&mut self, input_bit: Bit) {
-        assert_ne!(self.final_probability_opt, None);
-
         let contexts_count = self.contexts_chain.items().len();
 
         let cost_trackers = self.contexts_chain_predictor
@@ -97,9 +94,10 @@ impl<'a> Predictor<'a> {
         self.prediction_finalizer.update(input_bit, contexts_count,
                                          &self.last_bytes);
 
+        let final_probability =
+            drain_full_option(&mut self.final_probability_opt);
         self.statistics.on_next_bit(input_bit, &self.contexts_chain,
-                                    self.final_probability_opt.unwrap());
-        self.final_probability_opt = None;
+                                    final_probability);
 
         // updating this must be the last update step
         self.last_bytes.on_next_bit(input_bit);

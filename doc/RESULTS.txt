@@ -1,0 +1,88 @@
+Enhanced statistics and fixed bit order traversal Piotr Tarsa 25.07.18 16:54
+905359bf5719ac52810a5a7263aeada8857bce77
+
+piotrek@piotrek-desktop:~/projekty/demixer$ time run/main_release.sh ~/corpora/enwik8
+    Finished release [optimized] target(s) in 0.03s
+     Running `target/release/demixer /home/piotrek/corpora/enwik8`
+demixer - file compressor aimed at high compression ratios
+Copyright (C) 2018  Piotr Tarsa ( https://github.com/tarsa )
+
+initialization         =           0.023 seconds
+total duration         =        3289.695 seconds
+speed                  =       32896.950 ns per byte
+speed                  =       30397.955 bytes per second
+                       :  |  |  |  |   |
+total cost in bytes    =    20049558.515
+total cost in bits     =   160396468.118
+input length           =   100000000 bytes
+average cost           =           1.60396 bpb
+compression ratio      =           4.988 : 1
+
+Average context length =          11.609 bytes
+
+Occurrences and costs by context type:
+order 0, unary 0, count     5104.00, cost    4449.28, avg occur  840.181
+order 0, unary 1, count      502.88, cost     106.83, avg occur  583.103
+order 0, unary 2, count        0.00, cost       0.00, avg occur      NaN
+order 0, unary 3, count        0.00, cost       0.00, avg occur      NaN
+order 0, unary 4, count        0.00, cost       0.00, avg occur      NaN
+order 1, unary 0, count   112895.62, cost   83071.34, avg occur  668.794
+order 1, unary 1, count    28639.12, cost    9759.29, avg occur  304.088
+order 1, unary 2, count     4938.00, cost      63.65, avg occur  399.947
+order 1, unary 3, count        0.00, cost       0.00, avg occur      NaN
+order 1, unary 4, count        0.00, cost       0.00, avg occur      NaN
+order 2, unary 0, count   446717.62, cost  312240.15, avg occur  503.730
+order 2, unary 1, count   276449.88, cost   98133.86, avg occur  201.276
+order 2, unary 2, count    75411.38, cost    5734.30, avg occur  214.221
+order 2, unary 3, count    18247.75, cost      31.62, avg occur  183.521
+order 2, unary 4, count        0.00, cost       0.00, avg occur      NaN
+order 3, unary 0, count   949819.88, cost  660055.66, avg occur  368.967
+order 3, unary 1, count   830682.62, cost  313334.33, avg occur  159.108
+order 3, unary 2, count   449015.75, cost   49364.92, avg occur  146.942
+order 3, unary 3, count   133409.88, cost    2135.66, avg occur  131.758
+order 3, unary 4, count    35837.12, cost      23.98, avg occur  138.403
+order 4, unary 0, count  9054388.12, cost 6629352.59, avg occur  139.977
+order 4, unary 1, count  7523841.50, cost 4087597.42, avg occur   50.749
+order 4, unary 2, count  7117822.50, cost 2302487.72, avg occur   64.737
+order 4, unary 3, count  7684387.88, cost 1536699.49, avg occur   59.885
+order 4, unary 4, count 65251859.00, cost 3986817.31, avg occur   59.019
+
+Occurrences and costs by symbol value:
+   0            0          0.00 | 20     13519823     976612.51 | 40 @        300        550.99 | 60 `        379        613.08
+   1            0          0.00 | 21 !      14930       8580.01 | 41 A     339329     160193.86 | 61 a    5712026    1171086.18
+   2            0          0.00 | 22 "      24744         46.77 | 42 B     208784     114262.09 | 62 b    1004067     357226.50
+   3            0          0.00 | 23 #      46190      14099.91 | 43 C     340203     154898.41 | 63 c    2284625     591209.87
+   4            0          0.00 | 24 $       3993       3620.84 | 44 D     169944      94819.35 | 64 d    2400013     452434.50
+   5            0          0.00 | 25 %      16899      10385.30 | 45 E     177160      95611.49 | 65 e    8001205     970491.38
+   6            0          0.00 | 26 &     479245     176909.01 | 46 F     148917      87427.04 | 66 f    1360778     390503.37
+   7            0          0.00 | 27 '     946508     264749.67 | 47 G     145799      87057.44 | 67 g    1465591     268188.85
+   8            0          0.00 | 28 (     221072     109198.94 | 48 H     152512      91557.90 | 68 h    2836146     437789.18
+   9         4358       2134.21 | 29 )     221390     115034.14 | 49 I     251957     118155.28 | 69 i    5227649    1068190.39
+   a      1128023     225363.71 | 2a *     235695      40249.59 | 4a J      76029      53280.65 | 6a j      83366      57347.03
+   b            0          0.00 | 2b +       8932       6593.65 | 4b K      57854      39283.31 | 6b k     401138     122122.17
+   c            0          0.00 | 2c ,     787826     342762.18 | 4c L     122102      76199.72 | 6c l    3047318     601999.98
+   d            0          0.00 | 2d -     326098     142012.61 | 4d M     184894     109492.11 | 6d m    1944706     467312.44
+   e            0          0.00 | 2e .     794548     346390.82 | 4e N     119779      73723.73 | 6e n    4909103     637981.80
+   f            0          0.00 | 2f /     427309      63114.92 | 4f O      89984      58297.51 | 6f o    5176143     941397.44
+  10            0          0.00 | 30 0     376132      81318.19 | 50 P     183054     104403.08 | 70 p    1541263     449811.70
+  11            0          0.00 | 31 1     425137     149883.68 | 51 Q      10724      10312.63 | 71 q     260243      50457.53
+  12            0          0.00 | 32 2     266697     110143.27 | 52 R     141730      82237.25 | 72 r    4506880     780814.76
+  13            0          0.00 | 33 3     156663      74519.58 | 53 S     295942     146685.50 | 73 s    4347421     933811.10
+  14            0          0.00 | 34 4     145926      69785.36 | 54 T     308336     130710.09 | 74 t    6154908     931577.47
+  15            0          0.00 | 35 5     157908      68271.56 | 55 U      78012      49410.86 | 75 u    2017868     485679.05
+  16            0          0.00 | 36 6     134227      61443.25 | 56 V      46186      34638.41 | 76 v     693456     220862.00
+  17            0          0.00 | 37 7     121640      56975.12 | 57 W     102017      65742.07 | 77 w     930909     341101.85
+  18            0          0.00 | 38 8     146017      63755.29 | 58 X      10910       9237.15 | 78 x     223305      55138.68
+  19            0          0.00 | 39 9     247003      59672.24 | 59 Y      21602      16005.60 | 79 y    1067379     205830.84
+  1a            0          0.00 | 3a :     333366      67071.34 | 5a Z      25341      13770.75 | 7a z      99229      42241.88
+  1b            0          0.00 | 3b ;     572842      42249.75 | 5b [    1945220     299715.41 | 7b {      90906      23001.89
+  1c            0          0.00 | 3c <     267136      53749.85 | 5c \      17862       7594.57 | 7c |     435450     120470.79
+  1d            0          0.00 | 3d =     400912      84039.60 | 5d ]    1945253     321967.70 | 7d }      90958      29183.17
+  1e            0          0.00 | 3e >     267136        283.83 | 5e ^       3664       2101.86 | 7e ~       2463       1615.31
+  1f            0          0.00 | 3f ?      11551       9045.99 | 5f _      49420      28344.43 | 7f            0          0.00
+
+Total cost (computed using LUTs): 20081459.43 bytes
+
+real	54m49.774s
+user	54m49.448s
+sys	0m0.176s
